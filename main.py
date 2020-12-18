@@ -38,7 +38,8 @@ parser.add_argument(
     type=str,
     default='data/penn/',
     help='location of the data corpus')
-parser.add_argument('--dict_thd', type=int, default=1, help='upper epoch limit')
+parser.add_argument('--dict_thd', type=int, default=1,
+                    help='upper epoch limit')
 parser.add_argument(
     '--model',
     type=str,
@@ -59,7 +60,8 @@ parser.add_argument(
     '--lr', type=float, default=0.0003, help='initial learning rate')
 parser.add_argument(
     '--clip', type=float, default=0.25, help='gradient clipping')
-parser.add_argument('--epochs', type=int, default=100, help='upper epoch limit')
+parser.add_argument('--epochs', type=int, default=100,
+                    help='upper epoch limit')
 parser.add_argument(
     '--batch_size', type=int, default=4096, metavar='N', help='batch size')
 parser.add_argument(
@@ -107,16 +109,16 @@ args.tied = True
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 if torch.cuda.is_available():
-  if not args.cuda:
-    print('WARNING: You have a CUDA device, '
-          'so you should probably run with --cuda')
-  else:
-    torch.cuda.manual_seed(args.seed)
+    if not args.cuda:
+        print('WARNING: You have a CUDA device, '
+              'so you should probably run with --cuda')
+    else:
+        torch.cuda.manual_seed(args.seed)
 
 if args.cuda:
-  device = torch.device('cuda:0')
+    device = torch.device('cuda:0')
 else:
-  device = torch.device('cpu')
+    device = torch.device('cpu')
 
 mask_bernoulli = torch.distributions.Bernoulli(args.mask_rate)
 
@@ -127,14 +129,15 @@ mask_bernoulli = torch.distributions.Bernoulli(args.mask_rate)
 
 
 def model_save(fn):
-  with open(fn, 'wb') as f:
-    torch.save([model, criterion, optimizer, scheduler], f)
+    with open(fn, 'wb') as f:
+        torch.save([model, criterion, optimizer, scheduler], f)
 
 
 def model_load(fn):
-  global model, criterion, optimizer, scheduler
-  with open(fn, 'rb') as f:
-    model, criterion, optimizer, scheduler = torch.load(f)
+    global model, criterion, optimizer, scheduler
+    with open(fn, 'rb') as f:
+        model, criterion, optimizer, scheduler = torch.load(f)
+
 
 print('Loading dataset...')
 corpus = data_penn.Corpus(args.data, thd=args.dict_thd)
@@ -156,40 +159,40 @@ criterion = nn.CrossEntropyLoss(ignore_index=pad_token)
 ntokens = len(corpus.dictionary)
 print('Number of tokens: ', ntokens)
 if args.model == 'structformer':
-  model = structformer.StructFormer(
-      args.nhid,
-      args.nlayers,
-      ntokens,
-      args.nheads,
-      args.dropout,
-      args.dropatt,
-      args.relative_bias,
-      args.pos_emb,
-      pad=pad_token,
-      n_parser_layers=args.n_parser_layers,
-      conv_size=args.conv_size,
-      relations=args.relations.split(','),
-      weight_act=args.weight_act)
+    model = structformer.StructFormer(
+        args.nhid,
+        args.nlayers,
+        ntokens,
+        args.nheads,
+        args.dropout,
+        args.dropatt,
+        args.relative_bias,
+        args.pos_emb,
+        pad=pad_token,
+        n_parser_layers=args.n_parser_layers,
+        conv_size=args.conv_size,
+        relations=args.relations.split(','),
+        weight_act=args.weight_act)
 elif args.model == 'transformer':
-  model = structformer.Transformer(
-      args.nhid,
-      args.nlayers,
-      ntokens,
-      args.nheads,
-      args.dropout,
-      args.dropatt,
-      args.relative_bias,
-      args.pos_emb,
-      pad=pad_token)
+    model = structformer.Transformer(
+        args.nhid,
+        args.nlayers,
+        ntokens,
+        args.nheads,
+        args.dropout,
+        args.dropatt,
+        args.relative_bias,
+        args.pos_emb,
+        pad=pad_token)
 else:
-  raise Exception
+    raise Exception
 ###
 if args.resume:
-  print('Resuming model ...')
-  model_load(args.resume)
+    print('Resuming model ...')
+    model_load(args.resume)
 ###
 if args.cuda:
-  model = model.cuda()
+    model = model.cuda()
 ###
 params = list(model.parameters())
 total_params = sum(np.prod(x.size()) for x in params if x.size())
@@ -203,72 +206,75 @@ print('Model total parameters:', total_params)
 
 
 def mask_data(data):
-  """randomly mask input sequence."""
-  mask = mask_bernoulli.sample(data.shape).to(device).bool()
-  mask = mask * (data != pad_token) * (data != unk_token)
-  targets = data.masked_fill(~mask, pad_token)
-  data = data.masked_fill(mask, mask_token)
-  return data, targets
+    """randomly mask input sequence."""
+    mask = mask_bernoulli.sample(data.shape).to(device).bool()
+    mask = mask * (data != pad_token) * (data != unk_token)
+    targets = data.masked_fill(~mask, pad_token)
+    data = data.masked_fill(mask, mask_token)
+    return data, targets
 
 
 def evaluate(data_source):
-  """Evaluate the model on given dataset."""
-  model.eval()
-  total_loss = 0
-  total_count = 0
-  for data in data_source:
-    data, targets = mask_data(data)
-    pos = torch.arange(data.size(1), device=device)[None, :]
+    """Evaluate the model on given dataset."""
+    model.eval()
+    total_loss = 0
+    total_count = 0
+    for data in data_source:
+        data, targets = mask_data(data)
+        pos = torch.arange(data.size(1), device=device)[None, :]
 
-    output, _ = model(data, pos)
+        output, _ = model(data, pos)
 
-    loss = criterion(output, targets.reshape(-1))
-    count = (targets != pad_token).float().sum().data
-    total_loss += loss.data * count
-    total_count += count
+        loss = criterion(output, targets.reshape(-1))
+        count = (targets != pad_token).float().sum().data
+        total_loss += loss.data * count
+        total_count += count
 
-  return total_loss / total_count
+    return total_loss / total_count
 
 
 def train():
-  """One epoch of training."""
-  model.train()
-  # Turn on training mode which enables dropout.
-  if args.model == 'QRNN': model.reset()
-  total_loss = 0
-  start_time = time.time()
-  batch = 0
-  train_data = batchify(
-      corpus.train, args.batch_size, device, pad=pad_token, shuffle=True)
-  while batch < len(train_data):
-    data = train_data[batch]
-    data, targets = mask_data(data)
-    pos = torch.arange(data.size(1), device=device)[None, :]
+    """One epoch of training."""
+    model.train()
+    # Turn on training mode which enables dropout.
+    if args.model == 'QRNN':
+        model.reset()
+    total_loss = 0
+    start_time = time.time()
+    batch = 0
+    train_data = batchify(
+        corpus.train, args.batch_size, device, pad=pad_token, shuffle=True)
+    while batch < len(train_data):
+        data = train_data[batch]
+        data, targets = mask_data(data)
+        pos = torch.arange(data.size(1), device=device)[None, :]
 
-    optimizer.zero_grad()
+        optimizer.zero_grad()
 
-    output, _ = model(data, pos)
-    loss = criterion(output, targets.reshape(-1))
-    loss.backward()
+        output, _ = model(data, pos)
+        loss = criterion(output, targets.reshape(-1))
+        loss.backward()
 
-    # `clip_grad_norm` helps prevent the exploding gradient problem.
-    if args.clip: torch.nn.utils.clip_grad_norm_(params, args.clip)
-    optimizer.step()
+        # `clip_grad_norm` helps prevent the exploding gradient problem.
+        if args.clip:
+            torch.nn.utils.clip_grad_norm_(params, args.clip)
+        optimizer.step()
 
-    total_loss += loss.data
+        total_loss += loss.data
 
-    if batch % args.log_interval == 0 and batch > 0:
-      cur_loss = total_loss / args.log_interval
-      elapsed = time.time() - start_time
-      print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:05.5f} | '
-            'ms/batch {:5.2f} | loss {:5.2f} | ppl {:8.2f} '.format(
-                epoch, batch, len(train_data), optimizer.param_groups[0]['lr'],
-                elapsed * 1000 / args.log_interval, cur_loss,
-                math.exp(cur_loss)))
-      total_loss = 0
-      start_time = time.time()
-    ###
-    batch += 1
+        if batch % args.log_interval == 0 and batch > 0:
+            cur_loss = total_loss / args.log_interval
+            elapsed = time.time() - start_time
+            print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:05.5f} | '
+                  'ms/batch {:5.2f} | loss {:5.2f} | ppl {:8.2f} '.format(
+                      epoch, batch, len(
+                          train_data), optimizer.param_groups[0]['lr'],
+                      elapsed * 1000 / args.log_interval, cur_loss,
+                      math.exp(cur_loss)))
+            total_loss = 0
+            start_time = time.time()
+        ###
+        batch += 1
 
 
 # Loop over epochs.
@@ -277,41 +283,41 @@ stored_loss = 100000000
 
 # At any point you can hit Ctrl + C to break out of training early.
 try:
-  if not args.resume:
-    optimizer = torch.optim.Adam(
-        params, lr=args.lr, eps=1e-9, weight_decay=args.wdecay)
-    scheduler = lr_scheduler.ReduceLROnPlateau(
-        optimizer, 'min', 0.5, patience=2, threshold=0)
+    if not args.resume:
+        optimizer = torch.optim.Adam(
+            params, lr=args.lr, eps=1e-9, weight_decay=args.wdecay)
+        scheduler = lr_scheduler.ReduceLROnPlateau(
+            optimizer, 'min', 0.5, patience=2, threshold=0)
 
-  model_save(args.save)
+    model_save(args.save)
 
-  for epoch in range(1, args.epochs + 1):
-    epoch_start_time = time.time()
+    for epoch in range(1, args.epochs + 1):
+        epoch_start_time = time.time()
 
-    train()
+        train()
 
-    val_loss = evaluate(val_data)
-    print('-' * 89)
-    print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
-          'valid ppl {:8.2f} | valid bpc {:8.3f}'.format(
-              epoch, (time.time() - epoch_start_time), val_loss,
-              math.exp(val_loss), val_loss / math.log(2)))
-    print('-' * 89)
-    if args.test_grammar:
-      test_phrase_grammar.test(model, ptb_corpus, device)
-      print('-' * 89)
+        val_loss = evaluate(val_data)
+        print('-' * 89)
+        print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
+              'valid ppl {:8.2f} | valid bpc {:8.3f}'.format(
+                  epoch, (time.time() - epoch_start_time), val_loss,
+                  math.exp(val_loss), val_loss / math.log(2)))
+        print('-' * 89)
+        if args.test_grammar:
+            test_phrase_grammar.test(model, ptb_corpus, device)
+            print('-' * 89)
 
-    if val_loss < stored_loss:
-      model_save(args.save)
-      print('Saving model (new best validation)')
-      stored_loss = val_loss
-    scheduler.step(val_loss)
+        if val_loss < stored_loss:
+            model_save(args.save)
+            print('Saving model (new best validation)')
+            stored_loss = val_loss
+        scheduler.step(val_loss)
 
-    print('PROGRESS: {}%'.format((epoch / args.epochs) * 100))
+        print('PROGRESS: {}%'.format((epoch / args.epochs) * 100))
 
 except KeyboardInterrupt:
-  print('-' * 89)
-  print('Exiting from training early')
+    print('-' * 89)
+    print('Exiting from training early')
 
 # Load the best saved model.
 model_load(args.save)
@@ -324,5 +330,5 @@ print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
                                 test_loss / math.log(2)))
 print('=' * 89)
 if args.test_grammar:
-  test_phrase_grammar.test(model, ptb_corpus, device)
-  print('=' * 89)
+    test_phrase_grammar.test(model, ptb_corpus, device)
+    print('=' * 89)
