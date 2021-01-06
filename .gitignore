@@ -6,3 +6,4 @@ structformer.code-workspace
 *.txt
 *.pt
 data
+figures
