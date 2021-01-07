@@ -185,11 +185,11 @@ def test(parser, corpus, device, prt=False, gap=0):
 
     print('Dependency parsing performance:')
     print('Stanford Style:')
-    tree_utils.evald(dtree_list, './data/ptb/test.stanford', directed=True)
-    tree_utils.evald(dtree_list, './data/ptb/test.stanford', directed=False)
+    tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=True)
+    tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=False)
     print('Conll Style:')
-    tree_utils.evald(dtree_list, './data/ptb/test.conll', directed=True)
-    tree_utils.evald(dtree_list, './data/ptb/test.conll', directed=False)
+    tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=True)
+    tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=False)
 
     return mean(f1_list)
 
