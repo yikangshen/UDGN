@@ -24,6 +24,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
+from orion.client import report_objective
 
 import data_penn
 import data_ptb
@@ -329,6 +330,6 @@ print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
       'test bpc {:8.3f}'.format(test_loss, math.exp(test_loss),
                                 test_loss / math.log(2)))
 print('=' * 89)
-if args.test_grammar:
-    test_phrase_grammar.test(model, ptb_corpus, device)
-    print('=' * 89)
+f1 = test_phrase_grammar.test(model, ptb_corpus, device)
+report_objective(f1, name='f1')
+print('=' * 89)
