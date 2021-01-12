@@ -48,12 +48,7 @@ def test(parser, corpus, device, prt=False, gap=0):
     """
     parser.eval()
 
-    prec_list = []
-    reca_list = []
-    f1_list = []
     dtree_list = []
-    corpus_sys = {}
-    corpus_ref = {}
     nsens = 0
 
     word2idx = corpus.dictionary.word2idx
@@ -65,40 +60,14 @@ def test(parser, corpus, device, prt=False, gap=0):
         pos = torch.LongTensor([list(range(len(sen)))]).to(device)
 
         _, p_dict = parser(data, pos)
-        block = p_dict['block']
-        cibling = p_dict['cibling']
+        cibling = p_dict['head']
         head = p_dict['head']
-        distance = p_dict['distance']
-        height = p_dict['height']
 
-        distance = distance.clone().squeeze(0).cpu().numpy().tolist()
-        height = height.clone().squeeze(0).cpu().numpy().tolist()
         head = head.clone().squeeze(0).cpu().numpy()
-        max_height = numpy.max(height)
-
-        parse_tree = tree_utils.build_tree(distance, sen, gap=gap)
-
-        model_out, _ = tree_utils.get_brackets(parse_tree)
-        std_out, _ = tree_utils.get_brackets(sen_tree)
-        overlap = model_out.intersection(std_out)
-
-        corpus_sys[nsens] = tree_utils.mrg(parse_tree)
-        corpus_ref[nsens] = tree_utils.mrg_labeled(sen_nltktree)
-
-        prec = float(len(overlap)) / (len(model_out) + 1e-8)
-        reca = float(len(overlap)) / (len(std_out) + 1e-8)
-        if not std_out:
-            reca = 1.
-            if not model_out:
-                prec = 1.
-        f1 = 2 * prec * reca / (prec + reca + 1e-8)
-        prec_list.append(prec)
-        reca_list.append(reca)
-        f1_list.append(f1)
 
         new_words = []
         true_words = sen_nltktree.pos()
-        for d, c, w, ph in zip(distance, height, sen, head):
+        for w, ph in zip(sen, head):
             next_word = true_words.pop(0)
             while next_word[1] not in data_ptb.WORD_TAGS:
                 next_word = true_words.pop(0)
@@ -109,11 +78,9 @@ def test(parser, corpus, device, prt=False, gap=0):
                 'ctag': None,
                 'tag': next_word[1],
                 'feats': None,
-                'head': numpy.argmax(ph) + 1 if c < max_height else 0,
+                'head': numpy.argmax(ph) + 1,
                 'deps': collections.defaultdict(list),
                 'rel': None,
-                'distance': d,
-                'height': c
             })
         while true_words:
             next_word = true_words.pop(0)
@@ -126,15 +93,14 @@ def test(parser, corpus, device, prt=False, gap=0):
         dtree_list.append(dtree)
 
         if prt and len(dtree_list) % 100 == 0:
-            cibling = cibling.clone().squeeze(0).cpu().numpy()
-            block = block.clone().squeeze(0).cpu().numpy()
-            for word_i, d_i, imp_i, block_i, cibling_i, head_i in zip(
-                    sen, distance, height, block, cibling, head):
-                print('%20s\t%10.2f\t%5.2f\t%s\t%s\t%s' %
-                      (word_i, d_i, imp_i, plot(block_i, max_val=1.),
+            # cibling = cibling.clone().squeeze(0).transpose().cpu().numpy()
+            cibling = head.transpose()
+            for word_i, cibling_i, head_i in zip(
+                    sen, cibling, head):
+                print('%20s\t%s\t%s' %
+                      (word_i,
                        plot(head_i, max_val=1), plot(cibling_i, max_val=1.)))
             print('Standard output:', sen_tree)
-            print('Model output:', parse_tree)
             print(dtree.to_conll(10))
             print()
 
@@ -167,20 +133,6 @@ def test(parser, corpus, device, prt=False, gap=0):
 
         nsens += 1
 
-    print('Constituency parsing performance:')
-    print('Mean Prec: %.4f, Mean Reca: %.4f, Mean F1: %.4f' %
-          (mean(prec_list), mean(reca_list), mean(f1_list)))
-    correct, total = tree_utils.corpus_stats_labeled(corpus_sys, corpus_ref)
-    print(correct)
-    print(total)
-    print('SBAR: %.4f' % (correct['SBAR'] / total['SBAR']))
-    print('NP: %.4f' % (correct['NP'] / total['NP']))
-    print('VP: %.4f' % (correct['VP'] / total['VP']))
-    print('PP: %.4f' % (correct['PP'] / total['PP']))
-    print('ADJP: %.4f' % (correct['ADJP'] / total['ADJP']))
-    print('ADVP: %.4f' % (correct['ADVP'] / total['ADVP']))
-    print(tree_utils.corpus_average_depth(corpus_sys))
-
     print('-' * 89)
 
     print('Dependency parsing performance:')
@@ -191,7 +143,7 @@ def test(parser, corpus, device, prt=False, gap=0):
     tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=True)
     tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=False)
 
-    return mean(f1_list)
+    return 0
 
 
 if __name__ == '__main__':

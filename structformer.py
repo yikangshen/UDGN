@@ -16,6 +16,7 @@
 # Lint as: python3
 """StructFormer and transformer model."""
 
+from math import inf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -230,15 +231,8 @@ class StructFormer(Transformer):
                           nn.LayerNorm(hidden_size, elementwise_affine=False),
                           nn.Tanh()) for i in range(n_parser_layers)])
 
-        self.distance_ff = nn.Sequential(
-            layers.Conv1d(hidden_size, 2),
-            nn.LayerNorm(hidden_size, elementwise_affine=False), nn.Tanh(),
-            nn.Linear(hidden_size, 1))
-
-        self.height_ff = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
-            nn.LayerNorm(hidden_size, elementwise_affine=False), nn.Tanh(),
-            nn.Linear(hidden_size, 1))
+        self.parent_ff = nn.Linear(hidden_size, hidden_size)
+        self.child_ff = nn.Linear(hidden_size, hidden_size)
 
         n_rel = len(relations)
         self._rel_weight = nn.Parameter(torch.zeros((nlayers, nhead, n_rel)))
@@ -273,97 +267,31 @@ class StructFormer(Transformer):
         """
 
         mask = (x != self.pad)
-        mask_shifted = F.pad(mask[:, 1:], (0, 1), value=0)
+        visibility = mask[:, None, :].expand(-1, x.size(1), -1)
 
         h = self.emb(x)
         for i in range(self.n_parse_layers):
             h = h.masked_fill(~mask[:, :, None], 0)
             h = self.parser_layers[i](h)
 
-        height = self.height_ff(h).squeeze(-1)
-        height.masked_fill_(~mask, -1e9)
+        parent = self.parent_ff(h)
+        child = self.child_ff(h)
 
-        distance = self.distance_ff(h).squeeze(-1)
-        distance.masked_fill_(~mask_shifted, 1e9)
+        logits = torch.bmm(child, parent.transpose(1,2))
+        scaling = self.hidden_size ** -0.5
+        logits = (logits * scaling).masked_fill(~visibility, -inf)
+        p = torch.softmax(logits * scaling, dim=-1)
 
-        # Calbrating the distance and height to the same level
-        length = distance.size(1)
-        height_max = height[:, None, :].expand(-1, length, -1)
-        height_max = torch.cummax(
-            height_max.triu(0) - torch.ones_like(height_max).tril(-1) * 1e9,
-            dim=-1)[0].triu(0)
+        return p
 
-        margin_left = torch.relu(
-            F.pad(distance[:, :-1, None], (0, 0, 1, 0), value=1e9) - height_max)
-        margin_right = torch.relu(distance[:, None, :] - height_max)
-        margin = torch.where(margin_left > margin_right, margin_right,
-                             margin_left).triu(0)
-
-        margin_mask = torch.stack(
-            [mask_shifted] + [mask] * (length - 1), dim=1)
-        margin.masked_fill_(~margin_mask, 0)
-        margin = margin.max()
-
-        distance = distance - margin
-
-        return distance, height
-
-    def compute_block(self, distance, height):
-        """Compute constituents from distance and height."""
-
-        beta_logits = (distance[:, None, :] -
-                       height[:, :, None]) * self.scaler[0]
-
-        gamma = torch.sigmoid(-beta_logits)
-        ones = torch.ones_like(gamma)
-
-        block_mask_left = cummin(
-            gamma.tril(-1) + ones.triu(0), reverse=True, max_value=1)
-        block_mask_left = block_mask_left - F.pad(
-            block_mask_left[:, :, :-1], (1, 0), value=0)
-        block_mask_left.tril_(0)
-
-        block_mask_right = cummin(
-            gamma.triu(0) + ones.tril(-1), exclusive=True, max_value=1)
-        block_mask_right = block_mask_right - F.pad(
-            block_mask_right[:, :, 1:], (0, 1), value=0)
-        block_mask_right.triu_(0)
-
-        block_p = block_mask_left[:, :, :, None] * \
-            block_mask_right[:, :, None, :]
-        block = cumsum(block_mask_left).tril(0) + cumsum(
-            block_mask_right, reverse=True).triu(1)
-
-        return block_p, block
-
-    def compute_head(self, height):
-        """Estimate head for each constituent."""
-
-        _, length = height.size()
-        head_logits = height * self.scaler[1]
-        index = torch.arange(length, device=height.device)
-
-        mask = (index[:, None, None] <= index[None, None, :]) * (
-            index[None, None, :] <= index[None, :, None])
-        head_logits = head_logits[:, None, None,
-                                  :].repeat(1, length, length, 1)
-        head_logits.masked_fill_(~mask[None, :, :, :], -1e9)
-
-        head_p = torch.softmax(head_logits, dim=-1)
-
-        return head_p
-
-    def generate_mask(self, x, distance, height):
+    def generate_mask(self, head):
         """Compute head and cibling distribution for each token."""
 
-        bsz, length = x.size()
+        bsz, length, _ = head.size()
 
-        eye = torch.eye(length, device=x.device, dtype=torch.bool)
+        eye = torch.eye(length, device=head.device, dtype=torch.bool)
         eye = eye[None, :, :].expand((bsz, -1, -1))
 
-        block_p, block = self.compute_block(distance, height)
-        head_p = self.compute_head(height)
-        head = torch.einsum('blij,bijh->blh', block_p, head_p)
         head = head.masked_fill(eye, 0)
         child = head.transpose(1, 2)
         cibling = torch.bmm(head, child).masked_fill(eye, 0)
@@ -383,7 +311,7 @@ class StructFormer(Transformer):
         dep = torch.einsum('lhr,brij->lbhij', rel_weight, rel)
         att_mask = dep.reshape(self.nlayers, bsz * self.nhead, length, length)
 
-        return att_mask, cibling, head, block
+        return att_mask, cibling, head
 
     def encode(self, x, pos, att_mask):
         """Structformer encoding process."""
@@ -412,9 +340,8 @@ class StructFormer(Transformer):
 
         batch_size, length = x.size()
 
-        distance, height = self.parse(x, pos)
-        att_mask, cibling, head, block = self.generate_mask(
-            x, distance, height)
+        p = self.parse(x, pos)
+        att_mask, cibling, head = self.generate_mask(p)
 
         raw_output = self.encode(x, pos, att_mask)
         raw_output = self.norm(raw_output)
@@ -423,5 +350,4 @@ class StructFormer(Transformer):
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'distance': distance, 'height': height,
-             'cibling': cibling, 'head': head, 'block': block}
+            {'raw_output': raw_output, 'cibling': cibling, 'head': head}
