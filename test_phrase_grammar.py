@@ -105,6 +105,8 @@ def test(parser, corpus, device, prt=False, gap=0):
             print()
 
             fig_i, ax_i = plt.subplots()
+            im = ax_i.imshow(head)
+            
             ax_i.set_xticks(numpy.arange(len(sen)))
             ax_i.set_yticks(numpy.arange(len(sen)))
             ax_i.set_xticklabels(sen)
