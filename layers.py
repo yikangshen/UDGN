@@ -60,6 +60,12 @@ class Conv1d(nn.Module):
             padding=padding,
             dilation=dilation)
 
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        init.kaiming_uniform_(self.conv.weight, nonlinearity='linear')
+        init.zeros_(self.conv.bias)
+
     def forward(self, x):
         """Compute convolution.
 
@@ -80,12 +86,11 @@ class MultiheadAttention(nn.Module):
 
     def __init__(self,
                  embed_dim,
+                 hidden_dim,
                  num_heads,
                  dropout=0.,
-                 bias=True,
-                 v_proj=True,
-                 out_proj=True,
-                 relative_bias=True):
+                 dropatt=0.,
+                 bias=True):
         """Initialization.
 
         Args:
@@ -101,50 +106,29 @@ class MultiheadAttention(nn.Module):
 
         super(MultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
+        self.hidden_dim = hidden_dim
 
         self.num_heads = num_heads
         self.drop = nn.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
+        self.value_dim = hidden_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, ("embed_dim must be "
                                                              "divisible by "
                                                              "num_heads")
 
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        if v_proj:
-            self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        else:
-            self.v_proj = nn.Identity()
-
-        if out_proj:
-            self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        else:
-            self.out_proj = nn.Identity()
-
-        if relative_bias:
-            self.relative_bias = nn.Parameter(
-                torch.zeros((self.num_heads, 512)))
-        else:
-            self.relative_bias = None
+        self.proj = nn.Linear(embed_dim, embed_dim * 2 + hidden_dim * 2, bias=bias)
+        self.out_proj = nn.Linear(hidden_dim, embed_dim, bias=bias)
 
         self._reset_parameters()
 
     def _reset_parameters(self):
         """Initialize attention parameters."""
 
-        init.xavier_uniform_(self.q_proj.weight)
-        init.constant_(self.q_proj.bias, 0.)
+        init.kaiming_uniform_(self.proj.weight, nonlinearity='linear')
+        init.constant_(self.proj.bias, 0.)
 
-        init.xavier_uniform_(self.k_proj.weight)
-        init.constant_(self.k_proj.bias, 0.)
-
-        if isinstance(self.v_proj, nn.Linear):
-            init.xavier_uniform_(self.v_proj.weight)
-            init.constant_(self.v_proj.bias, 0.)
-
-        if isinstance(self.out_proj, nn.Linear):
-            init.xavier_uniform_(self.out_proj.weight)
-            init.constant_(self.out_proj.bias, 0.)
+        init.kaiming_uniform_(self.out_proj.weight, nonlinearity='linear')
+        init.constant_(self.out_proj.bias, 0.)
 
     def forward(self, query, key_padding_mask=None, attn_mask=None):
         """Compute multi-head self-attention.
@@ -160,63 +144,35 @@ class MultiheadAttention(nn.Module):
         length, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
 
-        head_dim = embed_dim // self.num_heads
-        assert head_dim * self.num_heads == embed_dim, ("embed_dim must be "
-                                                        "divisible by num_heads")
-        scaling = float(head_dim)**-0.5
-
-        q = self.q_proj(query)
-        k = self.k_proj(query)
-        v = self.v_proj(query)
-
-        q = q * scaling
-
-        if attn_mask is not None:
-            assert list(attn_mask.size()) == [bsz * self.num_heads,
-                                              query.size(0), query.size(0)]
+        q, k, v, g = self.proj(query).split(
+            [self.embed_dim, self.embed_dim, self.hidden_dim, self.hidden_dim], dim=-1)
 
         q = q.contiguous().view(length, bsz * self.num_heads,
-                                head_dim).transpose(0, 1)
+                                self.head_dim).transpose(0, 1)
         k = k.contiguous().view(length, bsz * self.num_heads,
-                                head_dim).transpose(0, 1)
+                                self.head_dim).transpose(0, 1)
         v = v.contiguous().view(length, bsz * self.num_heads,
-                                head_dim).transpose(0, 1)
+                                self.value_dim).transpose(0, 1)
+        g = g.contiguous().view(length, bsz * self.num_heads,
+                                self.value_dim).transpose(0, 1)
 
         attn_output_weights = torch.bmm(q, k.transpose(1, 2))
-        assert list(
-            attn_output_weights.size()) == [bsz * self.num_heads, length, length]
-
-        if self.relative_bias is not None:
-            pos = torch.arange(length, device=query.device)
-            relative_pos = torch.abs(pos[:, None] - pos[None, :]) + 256
-            relative_pos = relative_pos[None, :, :].expand(bsz * self.num_heads, -1,
-                                                           -1)
-
-            relative_bias = self.relative_bias.repeat_interleave(bsz, dim=0)
-            relative_bias = relative_bias[:, None, :].expand(-1, length, -1)
-            relative_bias = torch.gather(relative_bias, 2, relative_pos)
-            attn_output_weights = attn_output_weights + relative_bias
+        assert list(attn_output_weights.size()) == [bsz * self.num_heads, length, length]
 
         if key_padding_mask is not None:
             attn_output_weights = attn_output_weights + key_padding_mask
 
-        if attn_mask is None:
-            attn_output_weights = torch.softmax(attn_output_weights, dim=-1)
-        else:
-            attn_output_weights = torch.sigmoid(
-                attn_output_weights) * attn_mask
-
-        attn_output_weights = self.drop(attn_output_weights)
+        assert list(attn_mask.size()) == [bsz * self.num_heads, length, length]
+        attn_output_weights = torch.sigmoid(attn_output_weights) * attn_mask
 
         attn_output = torch.bmm(attn_output_weights, v)
+        gated_output = torch.tanh(attn_output) * torch.sigmoid(g)
+        gated_output = gated_output.transpose(0, 1).contiguous().view(
+            length, bsz, self.hidden_dim)
 
-        assert list(attn_output.size()) == [
-            bsz * self.num_heads, length, head_dim]
-        attn_output = attn_output.transpose(0, 1).contiguous().view(
-            length, bsz, embed_dim)
-        attn_output = self.out_proj(attn_output)
+        output = self.out_proj(gated_output)
 
-        return attn_output
+        return output
 
 
 class TransformerLayer(nn.Module):
@@ -245,18 +201,10 @@ class TransformerLayer(nn.Module):
 
         super(TransformerLayer, self).__init__()
         self.self_attn = MultiheadAttention(
-            d_model, nhead, dropout=dropatt, relative_bias=relative_bias)
-        # Implementation of Feedforward model
-        self.feedforward = nn.Sequential(
-            nn.LayerNorm(d_model), nn.Linear(d_model, dim_feedforward),
-            _get_activation_fn(activation), nn.Dropout(dropout),
-            nn.Linear(dim_feedforward, d_model))
+            d_model, d_model, nhead, dropout=dropout, dropatt=dropatt)
 
         self.norm = nn.LayerNorm(d_model)
-        self.dropout1 = nn.Dropout(dropout)
-        self.dropout2 = nn.Dropout(dropout)
-
-        self.nhead = nhead
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, src, attn_mask=None, key_padding_mask=None):
         """Pass the input through the encoder layer.
@@ -270,8 +218,6 @@ class TransformerLayer(nn.Module):
         """
         src2 = self.self_attn(
             self.norm(src), attn_mask=attn_mask, key_padding_mask=key_padding_mask)
-        src2 = src + self.dropout1(src2)
-        src3 = self.feedforward(src2)
-        src3 = src2 + self.dropout2(src3)
+        src2 = src + self.dropout(src2)
 
-        return src3
+        return src2

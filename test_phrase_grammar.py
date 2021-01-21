@@ -179,9 +179,8 @@ if __name__ == '__main__':
     # Load model
     print('Loading model...')
     with open(args.checkpoint, 'rb') as f:
-        model, _, _, _ = torch.load(f)
+        model, _, _, _ = torch.load(f, map_location='cpu')
         torch.cuda.manual_seed(args.seed)
-        model.cpu()
         if args.cuda:
             model.cuda()
 
