@@ -280,7 +280,7 @@ class StructFormer(Transformer):
         logits = torch.bmm(child, parent.transpose(1,2))
         scaling = self.hidden_size ** -0.5
         logits = (logits * scaling).masked_fill(~visibility, -inf)
-        p = torch.softmax(logits * scaling, dim=-1)
+        p = torch.softmax(logits, dim=-1)
 
         return p
 
