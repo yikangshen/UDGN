@@ -318,13 +318,17 @@ class StructFormer(Transformer):
 
         visibility = self.visibility(x, x.device)
         h = self.emb(x)
-        if hasattr(self, 'pos_emb'):
-            assert pos.max() < 500
-            h = h + self.pos_emb(pos)
         for i in range(self.nlayers):
-            h = self.layers[i](
+            if hasattr(self, 'pos_emb'):
+                assert pos.max() < 500
+                h = h + self.pos_emb(pos)
+            hi = self.layers[i](
                 h.transpose(0, 1), attn_mask=att_mask[i],
                 key_padding_mask=visibility).transpose(0, 1)
+            if i < self.nlayers - 1:
+                h = hi + h
+            else:
+                h = hi
         return h
 
     def forward(self, x, pos):
