@@ -144,8 +144,7 @@ def test(parser, corpus, device, prt=False, gap=0):
     uda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=False)
     print('Conll Style: %.3f DDA, %.3f UDA' % (dda, uda))
 
-
-    return 0
+    return dda
 
 
 if __name__ == '__main__':
