@@ -91,10 +91,6 @@ def evald(prd_list, trg_file_path, directed=True):
         total += len(prd_deps)
     acc = correct / total
 
-    if directed:
-        print('DDA: %.3f' % acc)
-    else:
-        print('UDA: %.3f' % acc)
     return acc
 
 
