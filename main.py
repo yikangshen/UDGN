@@ -332,6 +332,6 @@ print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
       'test bpc {:8.3f}'.format(test_loss, math.exp(test_loss),
                                 test_loss / math.log(2)))
 print('=' * 89)
-f1 = test_phrase_grammar.test(model, ptb_corpus, device)
-report_objective(f1, name='f1')
+dda = test_phrase_grammar.test(model, ptb_corpus, device)
 print('=' * 89)
+report_objective(1 - dda, name='dde')
