@@ -137,14 +137,14 @@ def test(parser, corpus, device, prt=False, gap=0):
     print('-' * 89)
 
     print('Dependency parsing performance:')
-    dda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=True)
-    uda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=False)
-    print('Stanford Style: %.3f DDA, %.3f UDA' % (dda, uda))
-    dda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=True)
-    uda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=False)
-    print('Conll Style: %.3f DDA, %.3f UDA' % (dda, uda))
+    stanford_dda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=True)
+    stanford_uda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=False)
+    print('Stanford Style: %.3f DDA, %.3f UDA' % (stanford_dda, stanford_uda))
+    conll_dda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=True)
+    conll_uda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=False)
+    print('Conll Style: %.3f DDA, %.3f UDA' % (conll_dda, conll_uda))
 
-    return dda
+    return stanford_dda
 
 
 if __name__ == '__main__':
