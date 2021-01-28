@@ -219,4 +219,6 @@ class TransformerLayer(nn.Module):
         src2 = self.self_attn(
             self.norm(src), attn_mask=attn_mask, key_padding_mask=key_padding_mask)
 
+        src2 = src + self.dropout(src2)
+
         return src2
