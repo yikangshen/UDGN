@@ -44,10 +44,7 @@ parser.add_argument(
 parser.add_argument('--dict_thd', type=int, default=1,
                     help='upper epoch limit')
 parser.add_argument(
-    '--model',
-    type=str,
-    default='structformer',
-    help='type of neural net (structformer, transformer)')
+    '--nemb', type=int, default=512, help='word embedding size')
 parser.add_argument(
     '--nhid', type=int, default=512, help='number of hidden units per layer')
 parser.add_argument('--nlayers', type=int, default=8, help='number of layers')
@@ -161,34 +158,22 @@ criterion = nn.CrossEntropyLoss(ignore_index=pad_token)
 
 ntokens = len(corpus.dictionary)
 print('Number of tokens: ', ntokens)
-if args.model == 'structformer':
-    model = structformer.StructFormer(
-        args.nhid,
-        args.nlayers,
-        ntokens,
-        args.nheads,
-        args.dropout,
-        args.dropatt,
-        args.relative_bias,
-        args.pos_emb,
-        pad=pad_token,
-        n_parser_layers=args.n_parser_layers,
-        conv_size=args.conv_size,
-        relations=args.relations.split(','),
-        weight_act=args.weight_act)
-elif args.model == 'transformer':
-    model = structformer.Transformer(
-        args.nhid,
-        args.nlayers,
-        ntokens,
-        args.nheads,
-        args.dropout,
-        args.dropatt,
-        args.relative_bias,
-        args.pos_emb,
-        pad=pad_token)
-else:
-    raise Exception
+model = structformer.StructFormer(
+    args.nemb,
+    args.nhid,
+    args.nlayers,
+    ntokens,
+    args.nheads,
+    args.dropout,
+    args.dropatt,
+    args.relative_bias,
+    args.pos_emb,
+    pad=pad_token,
+    n_parser_layers=args.n_parser_layers,
+    conv_size=args.conv_size,
+    relations=args.relations.split(','),
+    weight_act=args.weight_act)
+
 ###
 if args.resume:
     print('Resuming model ...')
@@ -240,8 +225,6 @@ def train():
     """One epoch of training."""
     model.train()
     # Turn on training mode which enables dropout.
-    if args.model == 'QRNN':
-        model.reset()
     total_loss = 0
     start_time = time.time()
     batch = 0

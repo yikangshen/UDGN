@@ -20,6 +20,7 @@ from math import inf
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import init
 
 import layers
 
@@ -71,118 +72,11 @@ def cummin(x, reverse=False, exclusive=False, max_value=1e9):
     return x
 
 
-class Transformer(nn.Module):
-    """Transformer model."""
-
-    def __init__(self,
-                 hidden_size,
-                 nlayers,
-                 ntokens,
-                 nhead=8,
-                 dropout=0.1,
-                 dropatt=0.1,
-                 relative_bias=True,
-                 pos_emb=False,
-                 pad=0):
-        """Initialization.
-
-        Args:
-          hidden_size: dimension of inputs and hidden states
-          nlayers: number of layers
-          ntokens: number of output categories
-          nhead: number of self-attention heads
-          dropout: dropout rate
-          dropatt: drop attention rate
-          relative_bias: bool, indicate whether use a relative position based
-            attention bias
-          pos_emb: bool, indicate whether use a learnable positional embedding
-          pad: pad token index
-        """
-
-        super(Transformer, self).__init__()
-
-        self.drop = nn.Dropout(dropout)
-
-        self.emb = nn.Embedding(ntokens, hidden_size)
-        if pos_emb:
-            self.pos_emb = nn.Embedding(500, hidden_size)
-
-        self.layers = nn.ModuleList([
-            layers.TransformerLayer(hidden_size, nhead, hidden_size * 4, dropout,
-                                    dropatt=dropatt, relative_bias=relative_bias)
-            for _ in range(nlayers)])
-
-        self.norm = nn.LayerNorm(hidden_size)
-
-        self.output_layer = nn.Linear(hidden_size, ntokens)
-        self.output_layer.weight = self.emb.weight
-
-        self.init_weights()
-
-        self.nlayers = nlayers
-        self.nhead = nhead
-        self.ntokens = ntokens
-        self.hidden_size = hidden_size
-        self.pad = pad
-
-    def init_weights(self):
-        """Initialize token embedding and output bias."""
-        initrange = 0.1
-        self.emb.weight.data.uniform_(-initrange, initrange)
-        if hasattr(self, 'pos_emb'):
-            self.pos_emb.weight.data.uniform_(-initrange, initrange)
-        self.output_layer.bias.data.fill_(0)
-
-    def visibility(self, x, device):
-        """Mask pad tokens."""
-        visibility = (x != self.pad).float()
-        visibility = visibility[:, None, :].expand(-1, x.size(1), -1)
-        visibility = torch.repeat_interleave(visibility, self.nhead, dim=0)
-        return visibility.log()
-
-    def encode(self, x, pos):
-        """Standard transformer encode process."""
-        h = self.emb(x)
-        if hasattr(self, 'pos_emb'):
-            h = h + self.pos_emb(pos)
-        h_list = []
-        visibility = self.visibility(x, x.device)
-
-        for i in range(self.nlayers):
-            h_list.append(h)
-            h = self.layers[i](
-                h.transpose(0, 1), key_padding_mask=visibility).transpose(0, 1)
-
-        output = h
-        h_array = torch.stack(h_list, dim=2)
-
-        return output, h_array
-
-    def forward(self, x, pos):
-        """Pass the input through the encoder layer.
-
-        Args:
-          x: input tokens (required).
-          pos: position for each token (optional).
-        Returns:
-          output: probability distributions for missing tokens.
-          state_dict: parsing results and raw output
-        """
-
-        batch_size, length = x.size()
-
-        raw_output, _ = self.encode(x, pos)
-        raw_output = self.norm(raw_output)
-        raw_output = self.drop(raw_output)
-
-        output = self.output_layer(raw_output)
-        return output.view(batch_size * length, -1), {'raw_output': raw_output, }
-
-
-class StructFormer(Transformer):
+class StructFormer(nn.Module):
     """StructFormer model."""
 
     def __init__(self,
+                 emb_size,
                  hidden_size,
                  nlayers,
                  ntokens,
@@ -215,34 +109,69 @@ class StructFormer(Transformer):
           weight_act: relations distribution activation function
         """
 
-        super(StructFormer, self).__init__(
-            hidden_size,
-            nlayers,
-            ntokens,
-            nhead=nhead,
-            dropout=dropout,
-            dropatt=dropatt,
-            relative_bias=relative_bias,
-            pos_emb=pos_emb,
-            pad=pad)
+        super(StructFormer, self).__init__()
+
+        self.drop = nn.Dropout(dropout)
+
+        self.emb = nn.Embedding(ntokens, emb_size)
+        if pos_emb:
+            self.pos_emb = nn.Embedding(500, emb_size)
+
+        self.layers = nn.ModuleList([
+            layers.TransformerLayer(emb_size, nhead, hidden_size, dropout,
+                                    dropatt=dropatt, relative_bias=relative_bias)
+            for _ in range(nlayers)])
+
+        self.norm = nn.LayerNorm(emb_size)
+
+        self.output_layer = nn.Linear(emb_size, ntokens)
+        self.output_layer.weight = self.emb.weight
 
         self.parser_layers = nn.ModuleList([
-            nn.Sequential(layers.Conv1d(hidden_size, conv_size),
-                          nn.LayerNorm(hidden_size, elementwise_affine=False),
+            nn.Sequential(layers.Conv1d(emb_size, conv_size),
+                          nn.LayerNorm(emb_size, elementwise_affine=False),
                           nn.Tanh()) for i in range(n_parser_layers)])
 
-        self.parent_ff = nn.Linear(hidden_size, hidden_size)
-        self.child_ff = nn.Linear(hidden_size, hidden_size)
+        self.parent_ff = nn.Linear(emb_size, emb_size)
+        self.child_ff = nn.Linear(emb_size, emb_size)
 
         n_rel = len(relations)
         self._rel_weight = nn.Parameter(torch.zeros((nlayers, nhead, n_rel)))
-        self._rel_weight.data.normal_(0, 0.1)
-
         self._scaler = nn.Parameter(torch.zeros(2))
 
         self.n_parse_layers = n_parser_layers
         self.weight_act = weight_act
         self.relations = relations
+        self.nlayers = nlayers
+        self.nhead = nhead
+        self.ntokens = ntokens
+        self.hidden_size = hidden_size
+        self.emb_size = emb_size
+        self.pad = pad
+
+        self.init_weights()
+
+    def init_weights(self):
+        """Initialize token embedding and output bias."""
+        initrange = 0.1
+        self.emb.weight.data.uniform_(-initrange, initrange)
+        if hasattr(self, 'pos_emb'):
+            self.pos_emb.weight.data.uniform_(-initrange, initrange)
+        self.output_layer.bias.data.fill_(0)
+
+        init.xavier_uniform_(self.parent_ff.weight)
+        init.zeros_(self.parent_ff.bias)
+        init.xavier_uniform_(self.child_ff.weight)
+        init.zeros_(self.child_ff.bias)
+
+        self._rel_weight.data.normal_(0, 0.1)
+
+    def visibility(self, x, device):
+        """Mask pad tokens."""
+        visibility = (x != self.pad).float()
+        visibility = visibility[:, None, :].expand(-1, x.size(1), -1)
+        visibility = torch.repeat_interleave(visibility, self.nhead, dim=0)
+        return visibility.log()
 
     @property
     def scaler(self):
@@ -278,7 +207,7 @@ class StructFormer(Transformer):
         child = self.child_ff(h)
 
         logits = torch.bmm(child, parent.transpose(1,2))
-        scaling = self.hidden_size ** -0.5
+        scaling = self.emb_size ** -0.5
         logits = (logits * scaling).masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 

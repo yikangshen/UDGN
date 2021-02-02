@@ -63,7 +63,7 @@ class Conv1d(nn.Module):
         self._reset_parameters()
 
     def _reset_parameters(self):
-        init.kaiming_uniform_(self.conv.weight, nonlinearity='linear')
+        init.xavier_uniform_(self.conv.weight)
         init.zeros_(self.conv.bias)
 
     def forward(self, x):
@@ -124,10 +124,10 @@ class MultiheadAttention(nn.Module):
     def _reset_parameters(self):
         """Initialize attention parameters."""
 
-        init.kaiming_uniform_(self.proj.weight, nonlinearity='linear')
+        init.xavier_uniform_(self.proj.weight)
         init.constant_(self.proj.bias, 0.)
 
-        init.kaiming_uniform_(self.out_proj.weight, nonlinearity='linear')
+        init.xavier_uniform_(self.out_proj.weight)
         init.constant_(self.out_proj.bias, 0.)
 
     def forward(self, query, key_padding_mask=None, attn_mask=None):
@@ -181,7 +181,7 @@ class TransformerLayer(nn.Module):
     def __init__(self,
                  d_model,
                  nhead,
-                 dim_feedforward=2048,
+                 d_hidden=2048,
                  dropout=0.1,
                  dropatt=0.1,
                  activation="leakyrelu",
@@ -201,7 +201,7 @@ class TransformerLayer(nn.Module):
 
         super(TransformerLayer, self).__init__()
         self.self_attn = MultiheadAttention(
-            d_model, d_model, nhead, dropout=dropout, dropatt=dropatt)
+            d_model, d_hidden, nhead, dropout=dropout, dropatt=dropatt)
 
         self.norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
