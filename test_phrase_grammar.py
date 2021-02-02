@@ -198,7 +198,7 @@ if __name__ == '__main__':
     print('=' * 89)
 
     rel_weight = model.rel_weight.detach().cpu().numpy()
-    fig, axs = plt.subplots(8, 8, sharex=True, sharey=True)
+    fig, axs = plt.subplots(rel_weight.shape[0], rel_weight.shape[1], sharex=True, sharey=True)
 
     names = ['p', 'd']
 
