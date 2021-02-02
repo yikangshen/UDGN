@@ -125,10 +125,12 @@ class MultiheadAttention(nn.Module):
         """Initialize attention parameters."""
 
         init.xavier_uniform_(self.proj.weight)
-        init.constant_(self.proj.bias, 0.)
+        if self.proj.bias is not None:
+            init.constant_(self.proj.bias, 0.)
 
         init.xavier_uniform_(self.out_proj.weight)
-        init.constant_(self.out_proj.bias, 0.)
+        if self.proj.bias is not None:
+            init.constant_(self.out_proj.bias, 0.)
 
     def forward(self, query, key_padding_mask=None, attn_mask=None):
         """Compute multi-head self-attention.
