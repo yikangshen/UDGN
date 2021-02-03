@@ -200,7 +200,7 @@ if __name__ == '__main__':
     rel_weight = model.rel_weight.detach().cpu().numpy()
     fig, axs = plt.subplots(rel_weight.shape[0], rel_weight.shape[1], sharex=True, sharey=True)
 
-    names = ['p', 'd']
+    names = model.relations
 
     for i in range(rel_weight.shape[0]):
         for j in range(rel_weight.shape[1]):
