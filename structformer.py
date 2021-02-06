@@ -78,7 +78,7 @@ class StructFormer(nn.Module):
 
     def __init__(self,
                  emb_size,
-                 hidden_size,
+                 head_size,
                  nlayers,
                  ntokens,
                  nhead=8,
@@ -94,7 +94,7 @@ class StructFormer(nn.Module):
         """Initialization.
 
         Args:
-          hidden_size: dimension of inputs and hidden states
+          head_size: dimension of inputs and hidden states
           nlayers: number of layers
           ntokens: number of output categories
           nhead: number of self-attention heads
@@ -119,7 +119,7 @@ class StructFormer(nn.Module):
             self.pos_emb = nn.Embedding(500, emb_size)
 
         self.layers = nn.ModuleList([
-            layers.TransformerLayer(emb_size, nhead, hidden_size, dropout,
+            layers.TransformerLayer(emb_size, nhead, head_size, dropout,
                                     dropatt=dropatt, relative_bias=relative_bias)
             for _ in range(nlayers)])
 
@@ -144,7 +144,6 @@ class StructFormer(nn.Module):
         self.nlayers = nlayers
         self.nhead = nhead
         self.ntokens = ntokens
-        self.hidden_size = hidden_size
         self.emb_size = emb_size
         self.pad = pad
 
@@ -167,10 +166,10 @@ class StructFormer(nn.Module):
 
     def visibility(self, x, device):
         """Mask pad tokens."""
-        visibility = (x != self.pad).float()
+        visibility = (x != self.pad)
         visibility = visibility[:, None, :].expand(-1, x.size(1), -1)
         visibility = torch.repeat_interleave(visibility, self.nhead, dim=0)
-        return visibility.log()
+        return visibility
 
     @property
     def scaler(self):
