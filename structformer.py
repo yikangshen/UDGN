@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 import layers
 
@@ -127,13 +128,11 @@ class StructFormer(nn.Module):
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
 
-        self.parser_layers = nn.ModuleList([
-            nn.Sequential(layers.Conv1d(emb_size, conv_size),
-                          nn.LayerNorm(emb_size, elementwise_affine=False),
-                          nn.Tanh()) for i in range(n_parser_layers)])
+        self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers, 
+            dropout=dropout, batch_first=True, bidirectional=True)
 
-        self.parent_ff = nn.Linear(emb_size, emb_size)
-        self.child_ff = nn.Linear(emb_size, emb_size)
+        self.parent_ff = nn.Linear(emb_size * 2, emb_size)
+        self.child_ff = nn.Linear(emb_size * 2, emb_size)
 
         n_rel = len(relations)
         self._rel_weight = nn.Parameter(torch.zeros((nlayers, nhead, n_rel)))
@@ -196,19 +195,21 @@ class StructFormer(nn.Module):
         """
 
         mask = (x != self.pad)
+        lengths = mask.sum(1).cpu().int()
         visibility = mask[:, None, :].expand(-1, x.size(1), -1)
 
         h = self.emb(x)
-        for i in range(self.n_parse_layers):
-            h = h.masked_fill(~mask[:, :, None], 0)
-            h = self.parser_layers[i](h)
+        h = pack_padded_sequence(h, lengths, batch_first=True)
+        h, _ = self.parser_layers(h)
+        h, _ = pad_packed_sequence(h, batch_first=True)
 
+        h = self.drop(h)
         parent = self.parent_ff(h)
         child = self.child_ff(h)
 
-        logits = torch.bmm(child, parent.transpose(1,2))
         scaling = self.emb_size ** -0.5
-        logits = (logits * scaling).masked_fill(~visibility, -inf)
+        logits = torch.bmm(child, parent.transpose(1,2)) * scaling
+        logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
         return p
@@ -232,6 +233,10 @@ class StructFormer(nn.Module):
             rel_list.append(child)
         if 'cibling' in self.relations:
             rel_list.append(cibling)
+        if 'neighbor' in self.relations:
+            left_eye = F.pad(eye[:, :, 1:], (0, 1), value=0)
+            right_eye = F.pad(eye[:, :, :-1], (1, 0), value=0)
+            rel_list.append(left_eye + right_eye)
 
         rel = torch.stack(rel_list, dim=1)
 

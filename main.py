@@ -49,7 +49,7 @@ parser.add_argument(
     '--nhid', type=int, default=512, help='number of hidden units per layer')
 parser.add_argument('--nlayers', type=int, default=8, help='number of layers')
 parser.add_argument(
-    '--n_parser_layers', type=int, default=3, help='number of layers')
+    '--n_parser_layers', type=int, default=2, help='number of layers')
 parser.add_argument('--nheads', type=int, default=8, help='number of layers')
 parser.add_argument(
     '--conv_size',

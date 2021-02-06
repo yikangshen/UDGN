@@ -24,7 +24,7 @@ import torch
 def batchify(idxs, bsz, device, pad=0, shuffle=True):
     """Batchify the training data."""
     length = [len(seq) for seq in idxs]
-    sorted_idx = numpy.argsort(length)
+    sorted_idx = numpy.argsort(length)[::-1]
     idxs_sorted = [idxs[i] for i in sorted_idx]
     idxs_batched = []
     i = 0
