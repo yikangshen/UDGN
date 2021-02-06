@@ -86,7 +86,7 @@ class MultiheadAttention(nn.Module):
 
     def __init__(self,
                  embed_dim,
-                 hidden_dim,
+                 head_dim,
                  num_heads,
                  dropout=0.,
                  dropatt=0.,
@@ -106,18 +106,15 @@ class MultiheadAttention(nn.Module):
 
         super(MultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
-        self.hidden_dim = hidden_dim
+        self.hidden_dim = head_dim * num_heads
 
         self.num_heads = num_heads
         self.drop = nn.Dropout(dropout)
-        self.head_dim = embed_dim // num_heads
-        self.value_dim = hidden_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, ("embed_dim must be "
-                                                             "divisible by "
-                                                             "num_heads")
+        self.head_dim = head_dim
+        self.value_dim = head_dim
 
-        self.proj = nn.Linear(embed_dim, embed_dim * 2 + hidden_dim * 2, bias=bias)
-        self.out_proj = nn.Linear(hidden_dim, embed_dim, bias=bias)
+        self.proj = nn.Linear(embed_dim, self.hidden_dim * 4, bias=bias)
+        self.out_proj = nn.Linear(self.hidden_dim, embed_dim, bias=bias)
 
         self._reset_parameters()
 
@@ -146,8 +143,7 @@ class MultiheadAttention(nn.Module):
         length, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
 
-        q, k, v, g = self.proj(query).split(
-            [self.embed_dim, self.embed_dim, self.hidden_dim, self.hidden_dim], dim=-1)
+        q, k, v, g = self.proj(query).chunk(4, dim=-1)
 
         q = q.contiguous().view(length, bsz * self.num_heads,
                                 self.head_dim).transpose(0, 1)
@@ -161,11 +157,11 @@ class MultiheadAttention(nn.Module):
         attn_output_weights = torch.bmm(q, k.transpose(1, 2))
         assert list(attn_output_weights.size()) == [bsz * self.num_heads, length, length]
 
-        if key_padding_mask is not None:
-            attn_output_weights = attn_output_weights + key_padding_mask
-
         assert list(attn_mask.size()) == [bsz * self.num_heads, length, length]
         attn_output_weights = torch.sigmoid(attn_output_weights) * attn_mask
+
+        if key_padding_mask is not None:
+            attn_output_weights.masked_fill_(~key_padding_mask, 0)
 
         attn_output = torch.bmm(attn_output_weights, v)
         gated_output = torch.tanh(attn_output) * torch.sigmoid(g)
@@ -183,7 +179,7 @@ class TransformerLayer(nn.Module):
     def __init__(self,
                  d_model,
                  nhead,
-                 d_hidden=2048,
+                 d_hidden=64,
                  dropout=0.1,
                  dropatt=0.1,
                  activation="leakyrelu",
