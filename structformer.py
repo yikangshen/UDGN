@@ -84,11 +84,9 @@ class StructFormer(nn.Module):
                  nhead=8,
                  dropout=0.1,
                  dropatt=0.1,
-                 relative_bias=False,
                  pos_emb=False,
                  pad=0,
                  n_parser_layers=4,
-                 conv_size=9,
                  relations=('head', 'child'),
                  weight_act='softmax'):
         """Initialization.
@@ -100,8 +98,6 @@ class StructFormer(nn.Module):
           nhead: number of self-attention heads
           dropout: dropout rate
           dropatt: drop attention rate
-          relative_bias: bool, indicate whether use a relative position based
-            attention bias
           pos_emb: bool, indicate whether use a learnable positional embedding
           pad: pad token index
           n_parser_layers: number of parsing layers
@@ -120,7 +116,7 @@ class StructFormer(nn.Module):
 
         self.layers = nn.ModuleList([
             layers.TransformerLayer(emb_size, nhead, head_size, dropout,
-                                    dropatt=dropatt, relative_bias=relative_bias)
+                                    dropatt=dropatt)
             for _ in range(nlayers)])
 
         self.norm = nn.LayerNorm(emb_size)
@@ -162,7 +158,7 @@ class StructFormer(nn.Module):
         init.xavier_uniform_(self.child_ff.weight)
         init.zeros_(self.child_ff.bias)
 
-        self._rel_weight.data.normal_(0, 0.1)
+        self._rel_weight.data.uniform_(0, 0.1)
 
     def visibility(self, x, device):
         """Mask pad tokens."""

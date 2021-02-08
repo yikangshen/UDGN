@@ -181,9 +181,7 @@ class TransformerLayer(nn.Module):
                  nhead,
                  d_hidden=64,
                  dropout=0.1,
-                 dropatt=0.1,
-                 activation="leakyrelu",
-                 relative_bias=True):
+                 dropatt=0.1):
         """Initialization.
 
         Args:

@@ -79,7 +79,6 @@ parser.add_argument(
     type=float,
     default=0.3,
     help='dropout for rnn layers (0 = no dropout)')
-parser.add_argument('--relative_bias', action='store_true', help='use CUDA')
 parser.add_argument('--pos_emb', action='store_true', help='use CUDA')
 parser.add_argument(
     '--weight_act', type=str, default='softmax', help='use CUDA')
@@ -159,18 +158,16 @@ criterion = nn.CrossEntropyLoss(ignore_index=pad_token)
 ntokens = len(corpus.dictionary)
 print('Number of tokens: ', ntokens)
 model = structformer.StructFormer(
-    args.nemb,
-    args.nhid,
-    args.nlayers,
-    ntokens,
-    args.nheads,
-    args.dropout,
-    args.dropatt,
-    args.relative_bias,
-    args.pos_emb,
+    emb_size = args.nemb,
+    head_size = args.nhid,
+    nlayers = args.nlayers,
+    ntokens = ntokens,
+    nhead = args.nheads,
+    dropout = args.dropout,
+    dropatt = args.dropatt,
+    pos_emb = args.pos_emb,
     pad=pad_token,
     n_parser_layers=args.n_parser_layers,
-    conv_size=args.conv_size,
     relations=args.relations.split(','),
     weight_act=args.weight_act)
 
