@@ -227,6 +227,12 @@ class StructFormer(nn.Module):
             rel_list.append(child)
         if 'cibling' in self.relations:
             rel_list.append(cibling)
+        if 'ancester' in self.relations:
+            ancester = torch.bmm(head, head).masked_fill(eye, 0)
+            rel_list.append(ancester)
+        if 'descent' in self.relations:
+            descent = torch.bmm(child, child).masked_fill(eye, 0)
+            rel_list.append(descent)
         if 'neighbor' in self.relations:
             left_eye = F.pad(eye[:, :, 1:], (0, 1), value=0)
             right_eye = F.pad(eye[:, :, :-1], (1, 0), value=0)
