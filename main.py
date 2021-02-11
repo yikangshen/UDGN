@@ -46,7 +46,7 @@ parser.add_argument('--dict_thd', type=int, default=1,
 parser.add_argument(
     '--nemb', type=int, default=512, help='word embedding size')
 parser.add_argument(
-    '--nhid', type=int, default=64, help='number of hidden units per layer')
+    '--nhid', type=int, default=128, help='number of hidden units per layer')
 parser.add_argument('--nlayers', type=int, default=8, help='number of layers')
 parser.add_argument(
     '--n_parser_layers', type=int, default=2, help='number of layers')
