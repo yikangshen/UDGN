@@ -221,6 +221,8 @@ class StructFormer(nn.Module):
         cibling = torch.bmm(head, child).masked_fill(eye, 0)
 
         rel_list = []
+        if 'eye' in self.relations:
+            rel_list.append(eye.float())
         if 'head' in self.relations:
             rel_list.append(head)
         if 'child' in self.relations:
