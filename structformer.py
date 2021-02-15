@@ -245,7 +245,7 @@ class StructFormer(nn.Module):
         dep = torch.einsum('lhr,brij->lbhij', rel_weight, rel)
         att_mask = dep.reshape(self.nlayers, bsz * self.nhead, length, length)
 
-        return att_mask, cibling, head
+        return att_mask, child, head
 
     def encode(self, x, pos, att_mask):
         """Structformer encoding process."""
@@ -275,7 +275,7 @@ class StructFormer(nn.Module):
         batch_size, length = x.size()
 
         p = self.parse(x, pos)
-        att_mask, cibling, head = self.generate_mask(p)
+        att_mask, child, head = self.generate_mask(p)
 
         raw_output = self.encode(x, pos, att_mask)
         raw_output = self.norm(raw_output)
@@ -284,4 +284,4 @@ class StructFormer(nn.Module):
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'cibling': cibling, 'head': head}
+            {'raw_output': raw_output, 'child': child, 'head': head}

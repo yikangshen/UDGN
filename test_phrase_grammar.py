@@ -60,7 +60,7 @@ def test(parser, corpus, device, prt=False, gap=0):
         pos = torch.LongTensor([list(range(len(sen)))]).to(device)
 
         _, p_dict = parser(data, pos)
-        cibling = p_dict['cibling']
+        child = p_dict['child']
         head = p_dict['head']
 
         head = head.clone().squeeze(0).cpu().numpy()
@@ -93,12 +93,12 @@ def test(parser, corpus, device, prt=False, gap=0):
         dtree_list.append(dtree)
 
         if prt and len(dtree_list) % 100 == 0:
-            cibling = cibling.clone().squeeze(0).cpu().numpy()
-            for word_i, cibling_i, head_i in zip(
-                    sen, cibling, head):
+            child = child.clone().squeeze(0).cpu().numpy()
+            for word_i, child_i, head_i in zip(
+                    sen, child, head):
                 print('%20s\t%s\t%s' %
                       (word_i,
-                       plot(head_i, max_val=1), plot(cibling_i, max_val=1.)))
+                       plot(head_i, max_val=1), plot(child_i, max_val=1.)))
             print('Standard output:', sen_tree)
             print(dtree.to_conll(10))
             print()
