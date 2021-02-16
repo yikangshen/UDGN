@@ -208,17 +208,15 @@ class StructFormer(nn.Module):
 
         return p
 
-    def generate_mask(self, head):
+    def generate_mask(self, p):
         """Compute head and cibling distribution for each token."""
 
-        bsz, length, _ = head.size()
+        bsz, length, _ = p.size()
 
-        eye = torch.eye(length, device=head.device, dtype=torch.bool)
+        eye = torch.eye(length, device=p.device, dtype=torch.bool)
         eye = eye[None, :, :].expand((bsz, -1, -1))
-
-        head = head.masked_fill(eye, 0)
+        head = p.masked_fill(eye, 0)
         child = head.transpose(1, 2)
-        cibling = torch.bmm(head, child).masked_fill(eye, 0)
 
         rel_list = []
         if 'eye' in self.relations:
@@ -228,6 +226,7 @@ class StructFormer(nn.Module):
         if 'child' in self.relations:
             rel_list.append(child)
         if 'cibling' in self.relations:
+            cibling = torch.bmm(head, child).masked_fill(eye, 0)
             rel_list.append(cibling)
         if 'ancester' in self.relations:
             ancester = torch.bmm(head, head).masked_fill(eye, 0)
