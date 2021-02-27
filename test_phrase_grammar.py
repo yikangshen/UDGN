@@ -198,7 +198,7 @@ if __name__ == '__main__':
     print('=' * 89)
 
     rel_weight = model.rel_weight.detach().cpu().numpy()
-    fig, axs = plt.subplots(rel_weight.shape[0], rel_weight.shape[1], sharex=True, sharey=True)
+    # fig, axs = plt.subplots(rel_weight.shape[0], rel_weight.shape[1], sharex=True, sharey=True)
 
     names = model.relations
 
@@ -206,11 +206,11 @@ if __name__ == '__main__':
         for j in range(rel_weight.shape[1]):
             print(plot(rel_weight[i, j], max_val=1.), end=' ')
             values = rel_weight[i, j]
-            if i == 0:
-                axs[i, j].set_title('%d' % (j,))
-            if j == 0:
-                axs[i, j].set_ylabel('%d' % (i,))
-            axs[i, j].bar(names, values)
+            # if i == 0:
+            #     axs[i, j].set_title('%d' % (j,))
+            # if j == 0:
+            #     axs[i, j].set_ylabel('%d' % (i,))
+            # axs[i, j].bar(names, values)
         print()
 
-    plt.savefig('./figures/mask_weights.png', dpi=300, format='png')
+    # plt.savefig('./figures/mask_weights.png', dpi=300, format='png')
