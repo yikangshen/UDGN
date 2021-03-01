@@ -126,7 +126,7 @@ class MultiheadAttention(nn.Module):
             init.constant_(self.proj.bias, 0.)
 
         init.xavier_uniform_(self.out_proj.weight)
-        if self.proj.bias is not None:
+        if self.out_proj.bias is not None:
             init.constant_(self.out_proj.bias, 0.)
 
     def forward(self, query, key_padding_mask=None, attn_mask=None):
@@ -163,8 +163,8 @@ class MultiheadAttention(nn.Module):
         if key_padding_mask is not None:
             attn_output_weights.masked_fill_(~key_padding_mask, 0)
 
-        attn_output = torch.bmm(attn_output_weights, v)
-        gated_output = torch.tanh(attn_output) * torch.sigmoid(g)
+        attn_output = torch.bmm(attn_output_weights, torch.tanh(v))
+        gated_output = attn_output * torch.sigmoid(g)
         gated_output = gated_output.transpose(0, 1).contiguous().view(
             length, bsz, self.hidden_dim)
 
