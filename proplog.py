@@ -28,7 +28,7 @@ if __name__ == "__main__":
                         help='number of hidden units per layer')
     parser.add_argument('--nslot', type=int, default=6,
                         help='number of memory slots')
-    parser.add_argument('--lr', type=float, default=0.001,
+    parser.add_argument('--lr', type=float, default=0.0003,
                         help='initial learning rate')
     parser.add_argument('--clip', type=float, default=1.,
                         help='gradient clipping')
@@ -218,7 +218,8 @@ class Classifier(nn.Module):
     def forward(self, input):
         batch_size = input.size(1)
         input = input.transpose(0, 1)
-        _, dict = self.encoder(input, None)
+        pos = torch.arange(input.size(1), device=input.device)[None, :]
+        _, dict = self.encoder(input, pos)
         output = dict['root']
         self.probs = dict
 
