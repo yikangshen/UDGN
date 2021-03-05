@@ -16,6 +16,7 @@
 # Lint as: python3
 """Convolution and transformer layers used by StructFormer."""
 
+import math
 import torch
 from torch import nn
 from torch.nn import init
@@ -32,6 +33,25 @@ def _get_activation_fn(activation):
 
     raise RuntimeError(
         "activation should be relu/gelu, not {}".format(activation))
+
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return self.dropout(x)
 
 
 class Conv1d(nn.Module):
@@ -157,11 +177,15 @@ class MultiheadAttention(nn.Module):
         attn_output_weights = torch.bmm(q, k.transpose(1, 2))
         assert list(attn_output_weights.size()) == [bsz * self.num_heads, length, length]
 
-        assert list(attn_mask.size()) == [bsz * self.num_heads, length, length]
-        attn_output_weights = torch.sigmoid(attn_output_weights) * attn_mask
-
         if key_padding_mask is not None:
-            attn_output_weights.masked_fill_(~key_padding_mask, 0)
+            attn_output_weights.masked_fill_(~key_padding_mask, -math.inf)
+        
+        if attn_mask is None:
+            scaling = self.head_dim ** -0.5
+            attn_output_weights = torch.softmax(attn_output_weights * scaling, dim=-1)
+        else:
+            assert list(attn_mask.size()) == [bsz * self.num_heads, length, length]
+            attn_output_weights = torch.sigmoid(attn_output_weights) * attn_mask
 
         attn_output = torch.bmm(attn_output_weights, torch.tanh(v))
         gated_output = attn_output * torch.sigmoid(g)
@@ -213,7 +237,8 @@ class TransformerLayer(nn.Module):
           src3: the output of transformer layer, share the same shape as src.
         """
         src2 = self.self_attn(
-            self.norm(src), attn_mask=attn_mask, key_padding_mask=key_padding_mask)
+            self.norm(src.transpose(0, 1)), attn_mask=attn_mask, 
+            key_padding_mask=key_padding_mask).transpose(0, 1)
 
         src2 = src + self.dropout(src2)
 
