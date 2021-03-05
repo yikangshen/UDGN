@@ -264,8 +264,8 @@ class StructFormer(nn.Module):
             h = h + self.pos_emb(pos)
         for i in range(self.nlayers):
             h = self.layers[i % self.size_layers](
-                h.transpose(0, 1), attn_mask=att_mask[i % self.size_layers],
-                key_padding_mask=visibility).transpose(0, 1)
+                h, attn_mask=att_mask[i % self.size_layers],
+                key_padding_mask=visibility)
         return h
 
     def forward(self, x, pos):
