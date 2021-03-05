@@ -204,7 +204,7 @@ class Classifier(nn.Module):
             ninp, 32, nslot, ntoken, nhead=8, dropout=dropout, 
             dropatt=0, pos_emb=False, pad=self.padding_idx, 
             n_parser_layers=2, relations=('child',),
-            weight_act='softmax')
+            weight_act='softmax', share_params=True)
 
         self.mlp = nn.Sequential(
             nn.Linear(4 * nhid, nhid),
