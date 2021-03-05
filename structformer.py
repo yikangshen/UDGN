@@ -88,7 +88,8 @@ class StructFormer(nn.Module):
                  pad=0,
                  n_parser_layers=4,
                  relations=('head', 'child'),
-                 weight_act='softmax'):
+                 weight_act='softmax',
+                 share_params=False):
         """Initialization.
 
         Args:
@@ -114,10 +115,15 @@ class StructFormer(nn.Module):
         if pos_emb:
             self.pos_emb = nn.Embedding(500, emb_size)
 
+        if share_params:
+            self.size_layers = 1
+        else:
+            self.size_layers = nlayers
+
         self.layers = nn.ModuleList([
             layers.TransformerLayer(emb_size, nhead, head_size, dropout,
                                     dropatt=dropatt)
-            for _ in range(nlayers)])
+            for _ in range(self.size_layers)])
 
         self.norm = nn.LayerNorm(emb_size)
 
@@ -131,7 +137,7 @@ class StructFormer(nn.Module):
         self.child_ff = nn.Linear(emb_size * 2, emb_size)
 
         n_rel = len(relations)
-        self._rel_weight = nn.Parameter(torch.zeros((nlayers, nhead, n_rel)))
+        self._rel_weight = nn.Parameter(torch.zeros((self.size_layers, nhead, n_rel)))
         self._scaler = nn.Parameter(torch.zeros(2))
 
         self.n_parse_layers = n_parser_layers
@@ -194,7 +200,7 @@ class StructFormer(nn.Module):
         visibility = mask[:, None, :].expand(-1, x.size(1), -1)
 
         h = self.emb(x)
-        h = pack_padded_sequence(h, lengths, batch_first=True)
+        h = pack_padded_sequence(h, lengths, batch_first=True, enforce_sorted=False)
         h, _ = self.parser_layers(h)
         h, _ = pad_packed_sequence(h, batch_first=True)
 
@@ -244,7 +250,7 @@ class StructFormer(nn.Module):
         rel_weight = self.rel_weight
 
         dep = torch.einsum('lhr,brij->lbhij', rel_weight, rel)
-        att_mask = dep.reshape(self.nlayers, bsz * self.nhead, length, length)
+        att_mask = dep.reshape(self.size_layers, bsz * self.nhead, length, length)
 
         return att_mask, child, head
 
@@ -257,8 +263,8 @@ class StructFormer(nn.Module):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
         for i in range(self.nlayers):
-            h = self.layers[i](
-                h.transpose(0, 1), attn_mask=att_mask[i],
+            h = self.layers[i % self.size_layers](
+                h.transpose(0, 1), attn_mask=att_mask[i % self.size_layers],
                 key_padding_mask=visibility).transpose(0, 1)
         return h
 
@@ -285,4 +291,4 @@ class StructFormer(nn.Module):
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'child': child, 'head': head}
+            {'raw_output': raw_output, 'child': child, 'head': head, 'root':raw_output[:, 0]}
