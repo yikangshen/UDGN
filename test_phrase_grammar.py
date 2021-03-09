@@ -69,8 +69,8 @@ def test(parser, corpus, device, prt=False, gap=0):
         true_words = sen_nltktree.pos()
         for w, ph in zip(sen, head):
             next_word = true_words.pop(0)
-            while next_word[1] not in data_ptb.WORD_TAGS:
-                next_word = true_words.pop(0)
+            # while next_word[1] not in data_ptb.WORD_TAGS:
+            #     next_word = true_words.pop(0)
             new_words.append({
                 'address': len(new_words) + 1,
                 'word': next_word[0],
@@ -84,7 +84,7 @@ def test(parser, corpus, device, prt=False, gap=0):
             })
         while true_words:
             next_word = true_words.pop(0)
-            assert next_word[1] not in data_ptb.WORD_TAGS
+            # assert next_word[1] not in data_ptb.WORD_TAGS
 
         dtree = DependencyGraph()
         for w in new_words:
@@ -158,7 +158,7 @@ if __name__ == '__main__':
     argpr.add_argument(
         '--data',
         type=str,
-        default='data/penn/',
+        default='data/deps/',
         help='location of the data corpus')
     argpr.add_argument(
         '--checkpoint',
@@ -183,19 +183,19 @@ if __name__ == '__main__':
         if args.cuda:
             model.cuda()
 
-    # Load data
-    print('Loading PTB dataset...')
-    ptb_corpus = data_ptb.Corpus(args.data)
+    # # Load data
+    # print('Loading PTB dataset...')
+    # ptb_corpus = data_ptb.Corpus(args.data)
 
-    print('Evaluating...')
-    if args.cuda:
-        eval_device = torch.device('cuda:0')
-    else:
-        eval_device = torch.device('cpu')
+    # print('Evaluating...')
+    # if args.cuda:
+    #     eval_device = torch.device('cuda:0')
+    # else:
+    #     eval_device = torch.device('cpu')
 
-    print('=' * 89)
-    test(model, ptb_corpus, eval_device, prt=args.print, gap=args.gap)
-    print('=' * 89)
+    # print('=' * 89)
+    # test(model, ptb_corpus, eval_device, prt=args.print, gap=args.gap)
+    # print('=' * 89)
 
     rel_weight = model.rel_weight.detach().cpu().numpy()
     # fig, axs = plt.subplots(rel_weight.shape[0], rel_weight.shape[1], sharex=True, sharey=True)

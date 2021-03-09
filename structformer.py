@@ -16,7 +16,7 @@
 # Lint as: python3
 """StructFormer and transformer model."""
 
-from math import inf
+from math import inf, log
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -130,11 +130,11 @@ class StructFormer(nn.Module):
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
 
-        self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers, 
+        self.parser_layers = nn.LSTM(emb_size, emb_size // 2, n_parser_layers, 
             dropout=dropout, batch_first=True, bidirectional=True)
 
-        self.parent_ff = nn.Linear(emb_size * 2, emb_size)
-        self.child_ff = nn.Linear(emb_size * 2, emb_size)
+        self.parent_ff = nn.Linear(emb_size, emb_size)
+        self.child_ff = nn.Linear(emb_size, emb_size)
 
         n_rel = len(relations)
         self._rel_weight = nn.Parameter(torch.zeros((self.size_layers, nhead, n_rel)))
@@ -184,7 +184,7 @@ class StructFormer(nn.Module):
         elif self.weight_act == 'softmax':
             return torch.softmax(self._rel_weight, dim=-1)
 
-    def parse(self, x, pos):
+    def parse(self, x, pos, deps=None):
         """Parse input sentence.
 
         Args:
@@ -208,11 +208,18 @@ class StructFormer(nn.Module):
         parent = self.parent_ff(h)
         child = self.child_ff(h)
 
+        if deps is not None:
+            bsz, length = x.size()
+            p = torch.zeros((bsz, length, length), device=x.device)
+            deps = deps.clamp(min=0)
+            p.scatter_(2, deps[:, :, None], 1)
+            return p, torch.zeros_like(p), h
+
         logits = torch.bmm(child, parent.transpose(1,2))
         logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
-        return p
+        return p, logits, h
 
     def generate_mask(self, p):
         """Compute head and cibling distribution for each token."""
@@ -223,6 +230,7 @@ class StructFormer(nn.Module):
         eye = eye[None, :, :].expand((bsz, -1, -1))
         head = p.masked_fill(eye, 0)
         child = head.transpose(1, 2)
+        cibling = torch.bmm(head, child).masked_fill(eye, 0)
 
         rel_list = []
         if 'eye' in self.relations:
@@ -232,7 +240,6 @@ class StructFormer(nn.Module):
         if 'child' in self.relations:
             rel_list.append(child)
         if 'cibling' in self.relations:
-            cibling = torch.bmm(head, child).masked_fill(eye, 0)
             rel_list.append(cibling)
         if 'ancester' in self.relations:
             ancester = torch.bmm(head, head).masked_fill(eye, 0)
@@ -252,9 +259,9 @@ class StructFormer(nn.Module):
         dep = torch.einsum('lhr,brij->lbhij', rel_weight, rel)
         att_mask = dep.reshape(self.size_layers, bsz * self.nhead, length, length)
 
-        return att_mask, child, head
+        return att_mask, cibling, head
 
-    def encode(self, x, pos, att_mask):
+    def encode(self, x, pos, att_mask, parser_h):
         """Structformer encoding process."""
 
         visibility = self.visibility(x, x.device)
@@ -264,11 +271,11 @@ class StructFormer(nn.Module):
             h = h + self.pos_emb(pos)
         for i in range(self.nlayers):
             h = self.layers[i % self.size_layers](
-                h, attn_mask=att_mask[i % self.size_layers],
+                h, parser_h, attn_mask=att_mask[i % self.size_layers],
                 key_padding_mask=visibility)
         return h
 
-    def forward(self, x, pos):
+    def forward(self, x, pos, deps=None):
         """Pass the input through the encoder layer.
 
         Args:
@@ -281,14 +288,15 @@ class StructFormer(nn.Module):
 
         batch_size, length = x.size()
 
-        p = self.parse(x, pos)
+        p, logp, parser_h = self.parse(x, pos, deps)
         att_mask, child, head = self.generate_mask(p)
 
-        raw_output = self.encode(x, pos, att_mask)
+        raw_output = self.encode(x, pos, att_mask, parser_h)
         raw_output = self.norm(raw_output)
         raw_output = self.drop(raw_output)
 
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'child': child, 'head': head, 'root':raw_output[:, 0]}
+            {'raw_output': raw_output, 'child': child, 'head': p, 'root':raw_output[:, 0],
+            'loghead': logp.view(batch_size * length, -1)}

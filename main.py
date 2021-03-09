@@ -28,8 +28,7 @@ import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
 from orion.client import report_objective
 
-import data_penn
-import data_ptb
+import data_dep
 import structformer
 import test_phrase_grammar
 from utils import batchify
@@ -39,9 +38,9 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--data',
     type=str,
-    default='data/penn/',
+    default='data/deps/',
     help='location of the data corpus')
-parser.add_argument('--dict_thd', type=int, default=1,
+parser.add_argument('--dict_thd', type=int, default=5,
                     help='upper epoch limit')
 parser.add_argument(
     '--nemb', type=int, default=512, help='word embedding size')
@@ -52,12 +51,10 @@ parser.add_argument(
     '--n_parser_layers', type=int, default=2, help='number of layers')
 parser.add_argument('--nheads', type=int, default=8, help='number of layers')
 parser.add_argument(
-    '--conv_size',
-    type=int,
-    default=9,
-    help='number of convolution window size')
-parser.add_argument(
     '--lr', type=float, default=0.0003, help='initial learning rate')
+parser.add_argument(
+    '--parser_weight', type=float, default=1.0, help='Parser loss weight')
+parser.add_argument('--ground_truth', action='store_true', help='use CUDA')
 parser.add_argument(
     '--clip', type=float, default=0.25, help='gradient clipping')
 parser.add_argument('--epochs', type=int, default=100,
@@ -139,21 +136,21 @@ def model_load(fn):
 
 
 print('Loading dataset...')
-corpus = data_penn.Corpus(args.data, thd=args.dict_thd)
-ptb_corpus = data_ptb.Corpus(args.data)
+corpus = data_dep.Corpus(args.data, thd=args.dict_thd)
 
 pad_token = corpus.dictionary.word2idx['<pad>']
 mask_token = corpus.dictionary.word2idx['<mask>']
 unk_token = corpus.dictionary.word2idx['<unk>']
 
-val_data = batchify(corpus.valid, args.batch_size, device, pad=pad_token)
-test_data = batchify(corpus.test, args.batch_size, device, pad=pad_token)
+val_data, val_heads = batchify(corpus.valid, corpus.valid_heads, args.batch_size, device, pad=pad_token)
+test_data, test_heads = batchify(corpus.test, corpus.test_heads, args.batch_size, device, pad=pad_token)
 
 ###############################################################################
 # Build the model
 ###############################################################################
 
 criterion = nn.CrossEntropyLoss(ignore_index=pad_token)
+head_criterion = nn.CrossEntropyLoss(ignore_index=-1)
 
 ntokens = len(corpus.dictionary)
 print('Number of tokens: ', ntokens)
@@ -200,23 +197,30 @@ def mask_data(data):
 
 
 @torch.no_grad()
-def evaluate(data_source):
+def evaluate(data_source, heads_source):
     """Evaluate the model on given dataset."""
     model.eval()
     total_loss = 0
     total_count = 0
-    for data in data_source:
+    total_corr = 0
+    total_words = 0
+    for data, heads in zip(data_source, heads_source):
         data, targets = mask_data(data)
         pos = torch.arange(data.size(1), device=device)[None, :]
 
-        output, _ = model(data, pos)
+        output, p_dict = model(data, pos, heads if args.ground_truth else None)
 
         loss = criterion(output, targets.reshape(-1))
         count = (targets != pad_token).float().sum().data
         total_loss += loss.data * count
         total_count += count
 
-    return total_loss / total_count
+        p_head = p_dict['head']
+        pred = p_head.argmax(-1)
+        total_corr += (pred == heads).float().sum().data
+        total_words += (heads > -1).float().sum().data
+
+    return total_loss / total_count, total_corr / total_words
 
 
 def train():
@@ -224,20 +228,24 @@ def train():
     model.train()
     # Turn on training mode which enables dropout.
     total_loss = 0
+    total_parser_loss = 0
     start_time = time.time()
     batch = 0
-    train_data = batchify(
-        corpus.train, args.batch_size, device, pad=pad_token, shuffle=True)
+    train_data, train_heads = batchify(
+        corpus.train, corpus.train_heads, args.batch_size, device, pad=pad_token, shuffle=True)
     while batch < len(train_data):
         data = train_data[batch]
+        heads = train_heads[batch]
         data, targets = mask_data(data)
         pos = torch.arange(data.size(1), device=device)[None, :]
 
         optimizer.zero_grad()
 
-        output, _ = model(data, pos)
+        output, p_dict = model(data, pos, heads if args.ground_truth else None)
         loss = criterion(output, targets.reshape(-1))
-        loss.backward()
+        logp_head = p_dict['loghead']
+        parser_loss = head_criterion(logp_head, heads.reshape(-1))
+        (loss + args.parser_weight * parser_loss).backward()
 
         # `clip_grad_norm` helps prevent the exploding gradient problem.
         if args.clip:
@@ -245,17 +253,20 @@ def train():
         optimizer.step()
 
         total_loss += loss.data
+        total_parser_loss += parser_loss.data
 
         if batch % args.log_interval == 0 and batch > 0:
             cur_loss = total_loss / args.log_interval
+            cur_parser_loss = total_parser_loss / args.log_interval
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:05.5f} | '
-                  'ms/batch {:5.2f} | loss {:5.2f} | ppl {:8.2f} '.format(
+                  'ms/batch {:5.2f} | loss {:5.2f} | ppl {:8.2f} | parser {:5.2f}'.format(
                       epoch, batch, len(
                           train_data), optimizer.param_groups[0]['lr'],
                       elapsed * 1000 / args.log_interval, cur_loss,
-                      math.exp(cur_loss)))
+                      math.exp(cur_loss), cur_parser_loss))
             total_loss = 0
+            total_parser_loss = 0
             start_time = time.time()
         ###
         batch += 1
@@ -280,16 +291,13 @@ try:
 
         train()
 
-        val_loss = evaluate(val_data)
+        val_loss, val_acc = evaluate(val_data, val_heads)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
-              'valid ppl {:8.2f} | valid bpc {:8.3f}'.format(
+              'valid ppl {:8.2f} | valid UAS {:5.3f}'.format(
                   epoch, (time.time() - epoch_start_time), val_loss,
-                  math.exp(val_loss), val_loss / math.log(2)))
+                  math.exp(val_loss), val_acc))
         print('-' * 89)
-        if args.test_grammar:
-            test_phrase_grammar.test(model, ptb_corpus, device)
-            print('-' * 89)
 
         if val_loss < stored_loss:
             model_save(args.save)
@@ -307,11 +315,9 @@ except KeyboardInterrupt:
 model_load(args.save)
 
 # Run on test data.
-test_loss = evaluate(test_data)
+test_loss, test_acc = evaluate(test_data, test_heads)
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
-      'test bpc {:8.3f}'.format(test_loss, math.exp(test_loss),
-                                test_loss / math.log(2)))
-dda = test_phrase_grammar.test(model, ptb_corpus, device)
+      'test UAS {:8.3f}'.format(test_loss, math.exp(test_loss),
+                                test_acc))
 print('=' * 89)
-report_objective(1 - dda, name='dde')

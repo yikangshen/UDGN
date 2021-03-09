@@ -133,7 +133,8 @@ class MultiheadAttention(nn.Module):
         self.head_dim = head_dim
         self.value_dim = head_dim
 
-        self.proj = nn.Linear(embed_dim, self.hidden_dim * 4, bias=bias)
+        self.qk_proj = nn.Linear(embed_dim, self.hidden_dim * 2, bias=bias)
+        self.vg_proj = nn.Linear(embed_dim, self.hidden_dim * 2, bias=bias)
         self.out_proj = nn.Linear(self.hidden_dim, embed_dim, bias=bias)
 
         self._reset_parameters()
@@ -141,15 +142,19 @@ class MultiheadAttention(nn.Module):
     def _reset_parameters(self):
         """Initialize attention parameters."""
 
-        init.xavier_uniform_(self.proj.weight)
-        if self.proj.bias is not None:
-            init.constant_(self.proj.bias, 0.)
+        init.xavier_uniform_(self.qk_proj.weight)
+        if self.qk_proj.bias is not None:
+            init.constant_(self.qk_proj.bias, 0.)
+
+        init.xavier_uniform_(self.vg_proj.weight)
+        if self.vg_proj.bias is not None:
+            init.constant_(self.vg_proj.bias, 0.)
 
         init.xavier_uniform_(self.out_proj.weight)
         if self.out_proj.bias is not None:
             init.constant_(self.out_proj.bias, 0.)
 
-    def forward(self, query, key_padding_mask=None, attn_mask=None):
+    def forward(self, query, ctl, key_padding_mask=None, attn_mask=None):
         """Compute multi-head self-attention.
 
         Args:
@@ -163,7 +168,8 @@ class MultiheadAttention(nn.Module):
         length, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
 
-        q, k, v, g = self.proj(query).chunk(4, dim=-1)
+        q, k = self.qk_proj(ctl).chunk(2, dim=-1)
+        v, g = self.vg_proj(query).chunk(2, dim=-1)
 
         q = q.contiguous().view(length, bsz * self.num_heads,
                                 self.head_dim).transpose(0, 1)
@@ -226,7 +232,7 @@ class TransformerLayer(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, src, attn_mask=None, key_padding_mask=None):
+    def forward(self, src, ctl, attn_mask=None, key_padding_mask=None):
         """Pass the input through the encoder layer.
 
         Args:
@@ -237,7 +243,7 @@ class TransformerLayer(nn.Module):
           src3: the output of transformer layer, share the same shape as src.
         """
         src2 = self.self_attn(
-            self.norm(src.transpose(0, 1)), attn_mask=attn_mask, 
+            self.norm(src.transpose(0, 1)), ctl.transpose(0, 1), attn_mask=attn_mask, 
             key_padding_mask=key_padding_mask).transpose(0, 1)
 
         src2 = src + self.dropout(src2)

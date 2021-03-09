@@ -21,12 +21,14 @@ import numpy
 import torch
 
 
-def batchify(idxs, bsz, device, pad=0, shuffle=True):
+def batchify(idxs, heads, bsz, device, pad=0, shuffle=True):
     """Batchify the training data."""
     length = [len(seq) for seq in idxs]
     sorted_idx = numpy.argsort(length)[::-1]
     idxs_sorted = [idxs[i] for i in sorted_idx]
+    heads_sorted = [heads[i] for i in sorted_idx]
     idxs_batched = []
+    heads_batched = []
     i = 0
 
     def get_batch(source, i, batch_size, pad=0):
@@ -46,11 +48,13 @@ def batchify(idxs, bsz, device, pad=0, shuffle=True):
 
     while i < len(idxs_sorted):
         idxs_batched.append(get_batch(idxs_sorted, i, bsz, pad))
+        heads_batched.append(get_batch(heads_sorted, i, bsz, pad=-1))
         i += idxs_batched[-1].size(0)
 
     if shuffle:
         sentence_idx = list(range(len(idxs_batched)))
         random.shuffle(sentence_idx)
         idxs_batched = [idxs_batched[i] for i in sentence_idx]
+        heads_batched = [heads_batched[i] for i in sentence_idx]
 
-    return idxs_batched
+    return idxs_batched, heads_batched
