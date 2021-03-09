@@ -117,6 +117,15 @@ class Corpus(object):
             self.dictionary = Dictionary()
             build_dict = True
 
+        label_file_name = os.path.join(path, 'label.pkl')
+        if os.path.exists(label_file_name):
+            print('Loading labels...')
+            self.labels = pickle.load(open(label_file_name, 'rb'))
+            build_label = False
+        else:
+            self.labels = Dictionary()
+            build_label = True
+
         all_file_ids = ptb.fileids()
         train_file_ids = []
         valid_file_ids = []
@@ -133,11 +142,11 @@ class Corpus(object):
                     ('WSJ/24/WSJ_2400.MRG' <= file_id <= 'WSJ/24/WSJ_2499.MRG'):
                 rest_file_ids.append(file_id)
 
-        self.train, self.train_heads \
-            = self.tokenize(train_file_ids, build_dict=build_dict)
-        self.valid, self.valid_heads \
+        self.train, self.train_heads, self.train_labels \
+            = self.tokenize(train_file_ids, build_dict, build_label)
+        self.valid, self.valid_heads, self.valid_labels \
             = self.tokenize(valid_file_ids)
-        self.test, self.test_heads \
+        self.test, self.test_heads, self.test_labels \
             = self.tokenize(test_file_ids)
 
         if build_dict:
@@ -154,7 +163,7 @@ class Corpus(object):
                 words.append(w)
         return words
 
-    def tokenize(self, file_ids, build_dict=False, thd=5):
+    def tokenize(self, file_ids, build_dict=False, build_label=False, thd=5):
         """Tokenizes a text file."""
 
         sens = []
@@ -169,7 +178,7 @@ class Corpus(object):
                     g = DependencyGraph(s, top_relation_label='root', cell_extractor=extract_10_cells)
                     sen = []
                     head = []
-                    label = []
+                    sen_label = []
                     for address in range(1, len(g.nodes)):
                         node = g.nodes[address]
                         w = node['word']
@@ -180,12 +189,12 @@ class Corpus(object):
                             head.append(node['head'] - 1)
                         else:
                             head.append(node['address'] - 1)
-                        label.append(node['rel'])
+                        sen_label.append(node['rel'])
 
                     if len(sen) > 0:
                         sens.append(sen)
                         heads.append(head)
-                        labels.append(label)
+                        labels.append(sen_label)
 
         if build_dict:
             # Add words to the dictionary
@@ -195,12 +204,21 @@ class Corpus(object):
             if thd > 1:
                 self.dictionary.rebuild_by_freq(thd)
 
+        if build_label:
+            for sen_label in labels:
+                for label in sen_label:
+                    self.labels.add_word(label)
+
         # Tokenize file content
         ids_list = []
-        for sen in sens:
+        labels_list = []
+        for sen, sen_label in zip(sens, labels):
             ids = []
-            for word in sen:
+            label_ids = []
+            for word, label in zip(sen, sen_label):
                 ids.append(self.dictionary[word])
+                label_ids.append(self.labels[label])
             ids_list.append(ids)
+            labels_list.append(label_ids)
 
-        return ids_list, heads
+        return ids_list, heads, labels_list
