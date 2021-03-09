@@ -154,7 +154,7 @@ class MultiheadAttention(nn.Module):
         if self.out_proj.bias is not None:
             init.constant_(self.out_proj.bias, 0.)
 
-    def forward(self, query, ctl, key_padding_mask=None, attn_mask=None):
+    def forward(self, query, ctl=None, key_padding_mask=None, attn_mask=None):
         """Compute multi-head self-attention.
 
         Args:
@@ -168,7 +168,10 @@ class MultiheadAttention(nn.Module):
         length, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
 
-        q, k = self.qk_proj(ctl).chunk(2, dim=-1)
+        if ctl is None:
+            q, k = self.qk_proj(query).chunk(2, dim=-1)
+        else:
+            q, k = self.qk_proj(ctl).chunk(2, dim=-1)
         v, g = self.vg_proj(query).chunk(2, dim=-1)
 
         q = q.contiguous().view(length, bsz * self.num_heads,
@@ -232,7 +235,7 @@ class TransformerLayer(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, src, ctl, attn_mask=None, key_padding_mask=None):
+    def forward(self, src, ctl=None, attn_mask=None, key_padding_mask=None):
         """Pass the input through the encoder layer.
 
         Args:
@@ -243,8 +246,8 @@ class TransformerLayer(nn.Module):
           src3: the output of transformer layer, share the same shape as src.
         """
         src2 = self.self_attn(
-            self.norm(src.transpose(0, 1)), ctl.transpose(0, 1), attn_mask=attn_mask, 
-            key_padding_mask=key_padding_mask).transpose(0, 1)
+            self.norm(src), ctl=ctl, attn_mask=attn_mask, 
+            key_padding_mask=key_padding_mask)
 
         src2 = src + self.dropout(src2)
 

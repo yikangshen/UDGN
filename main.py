@@ -53,7 +53,7 @@ parser.add_argument('--nheads', type=int, default=8, help='number of layers')
 parser.add_argument(
     '--lr', type=float, default=0.0003, help='initial learning rate')
 parser.add_argument(
-    '--parser_weight', type=float, default=1.0, help='Parser loss weight')
+    '--parser_loss', type=float, default=1.0, help='Parser loss weight')
 parser.add_argument('--ground_truth', action='store_true', help='use CUDA')
 parser.add_argument(
     '--clip', type=float, default=0.25, help='gradient clipping')
@@ -245,7 +245,7 @@ def train():
         loss = criterion(output, targets.reshape(-1))
         logp_head = p_dict['loghead']
         parser_loss = head_criterion(logp_head, heads.reshape(-1))
-        (loss + args.parser_weight * parser_loss).backward()
+        (loss + args.parser_loss * parser_loss).backward()
 
         # `clip_grad_norm` helps prevent the exploding gradient problem.
         if args.clip:

@@ -270,11 +270,13 @@ class StructFormer(nn.Module):
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
+        h = h.transpose(0, 1)
+        parser_h = parser_h.transpose(0, 1)
         for i in range(self.nlayers):
             h = self.layers[i % self.size_layers](
                 h, parser_h, attn_mask=att_mask[i % self.size_layers],
                 key_padding_mask=visibility)
-        return h
+        return h.transpose(0, 1)
 
     def forward(self, x, pos, deps=None):
         """Pass the input through the encoder layer.
