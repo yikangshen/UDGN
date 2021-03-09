@@ -170,18 +170,17 @@ class Corpus(object):
                     sen = []
                     head = []
                     label = []
-                    for address in g.nodes:
-                        if address > 0:
-                            node = g.nodes[address]
-                            w = node['word']
-                            w = w.lower()
-                            w = re.sub('[0-9]+', 'N', w)
-                            sen.append(w)
-                            if node['head'] > 0:
-                                head.append(node['head'] - 1)
-                            else:
-                                head.append(node['address'] - 1)
-                            label.append(node['rel'])
+                    for address in range(1, len(g.nodes)):
+                        node = g.nodes[address]
+                        w = node['word']
+                        w = w.lower()
+                        w = re.sub('[0-9]+', 'N', w)
+                        sen.append(w)
+                        if node['head'] > 0:
+                            head.append(node['head'] - 1)
+                        else:
+                            head.append(node['address'] - 1)
+                        label.append(node['rel'])
 
                     if len(sen) > 0:
                         sens.append(sen)

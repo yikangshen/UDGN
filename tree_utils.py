@@ -30,15 +30,9 @@ def get_dep(t, directed=True):
     """Get depth of t."""
     deps = []
     for _, node in t.nodes.items():
-        word, label, head = node['word'], node['tag'], node['head']
-        if label in WORD_TAGS:
-            while (head != 0) and (t.nodes[head]['tag'] not in WORD_TAGS):
-                head = t.nodes[head]['head']
-            if head == 0:
-                head_word = '<s>'
-            else:
-                head_word = t.nodes[head]['word'].lower()
-            rel = (word.lower(), head_word)
+        if node['address'] > 0:
+            address, head = node['address'], node['head']
+            rel = (address, head)
             if directed:
                 deps.append(rel)
             else:

@@ -24,7 +24,7 @@ import numpy
 import torch
 from nltk.parse import DependencyGraph
 
-import data_ptb
+import data_dep
 import tree_utils
 from hinton import plot
 
@@ -51,13 +51,13 @@ def test(parser, corpus, device, prt=False, gap=0):
     dtree_list = []
     nsens = 0
 
-    word2idx = corpus.dictionary.word2idx
-    dataset = zip(corpus.test_sens, corpus.test_trees, corpus.test_nltktrees)
+    idx2word = corpus.dictionary.idx2word
+    dataset = zip(corpus.test, corpus.test_heads)
 
-    for sen, sen_tree, sen_nltktree in dataset:
-        x = [word2idx[w] if w in word2idx else word2idx['<unk>'] for w in sen]
+    for x, deps in dataset:
+        sen = [idx2word[idx] for idx in x]
         data = torch.LongTensor([x]).to(device)
-        pos = torch.LongTensor([list(range(len(sen)))]).to(device)
+        pos = torch.LongTensor([list(range(len(x)))]).to(device)
 
         _, p_dict = parser(data, pos)
         child = p_dict['child']
@@ -66,25 +66,18 @@ def test(parser, corpus, device, prt=False, gap=0):
         head = head.clone().squeeze(0).cpu().numpy()
 
         new_words = []
-        true_words = sen_nltktree.pos()
         for w, ph in zip(sen, head):
-            next_word = true_words.pop(0)
-            # while next_word[1] not in data_ptb.WORD_TAGS:
-            #     next_word = true_words.pop(0)
             new_words.append({
                 'address': len(new_words) + 1,
-                'word': next_word[0],
+                'word': w,
                 'lemma': None,
                 'ctag': None,
-                'tag': next_word[1],
+                'tag': None,
                 'feats': None,
                 'head': numpy.argmax(ph) + 1,
                 'deps': collections.defaultdict(list),
                 'rel': None,
             })
-        while true_words:
-            next_word = true_words.pop(0)
-            # assert next_word[1] not in data_ptb.WORD_TAGS
 
         dtree = DependencyGraph()
         for w in new_words:
@@ -99,38 +92,37 @@ def test(parser, corpus, device, prt=False, gap=0):
                 print('%20s\t%s\t%s' %
                       (word_i,
                        plot(head_i, max_val=1), plot(child_i, max_val=1.)))
-            print('Standard output:', sen_tree)
             print(dtree.to_conll(10))
             print()
 
-            fig_i, ax_i = plt.subplots()
-            im = ax_i.imshow(head)
+            # fig_i, ax_i = plt.subplots()
+            # im = ax_i.imshow(head)
             
-            ax_i.set_xticks(numpy.arange(len(sen)))
-            ax_i.set_yticks(numpy.arange(len(sen)))
-            ax_i.set_xticklabels(sen)
-            ax_i.set_yticklabels(sen)
+            # ax_i.set_xticks(numpy.arange(len(sen)))
+            # ax_i.set_yticks(numpy.arange(len(sen)))
+            # ax_i.set_xticklabels(sen)
+            # ax_i.set_yticklabels(sen)
 
-            plt.setp(
-                ax_i.get_xticklabels(),
-                rotation=45,
-                ha='right',
-                rotation_mode='anchor')
+            # plt.setp(
+            #     ax_i.get_xticklabels(),
+            #     rotation=45,
+            #     ha='right',
+            #     rotation_mode='anchor')
 
-            for row in range(len(sen)):
-                for col in range(len(sen)):
-                    _ = ax_i.text(
-                        col,
-                        row,
-                        '%.2f' % (head[row, col]),
-                        ha='center',
-                        va='center',
-                        color='w')
-            fig_i.tight_layout()
-            plt.savefig(
-                './figures/sentence-%d.png' % (len(dtree_list)),
-                dpi=300,
-                format='png')
+            # for row in range(len(sen)):
+            #     for col in range(len(sen)):
+            #         _ = ax_i.text(
+            #             col,
+            #             row,
+            #             '%.2f' % (head[row, col]),
+            #             ha='center',
+            #             va='center',
+            #             color='w')
+            # fig_i.tight_layout()
+            # plt.savefig(
+            #     './figures/sentence-%d.png' % (len(dtree_list)),
+            #     dpi=300,
+            #     format='png')
 
         nsens += 1
 
@@ -183,19 +175,19 @@ if __name__ == '__main__':
         if args.cuda:
             model.cuda()
 
-    # # Load data
-    # print('Loading PTB dataset...')
-    # ptb_corpus = data_ptb.Corpus(args.data)
+    # Load data
+    print('Loading PTB dataset...')
+    ptb_corpus = data_dep.Corpus(args.data)
 
-    # print('Evaluating...')
-    # if args.cuda:
-    #     eval_device = torch.device('cuda:0')
-    # else:
-    #     eval_device = torch.device('cpu')
+    print('Evaluating...')
+    if args.cuda:
+        eval_device = torch.device('cuda:0')
+    else:
+        eval_device = torch.device('cpu')
 
-    # print('=' * 89)
-    # test(model, ptb_corpus, eval_device, prt=args.print, gap=args.gap)
-    # print('=' * 89)
+    print('=' * 89)
+    test(model, ptb_corpus, eval_device, prt=args.print, gap=args.gap)
+    print('=' * 89)
 
     rel_weight = model.rel_weight.detach().cpu().numpy()
     # fig, axs = plt.subplots(rel_weight.shape[0], rel_weight.shape[1], sharex=True, sharey=True)

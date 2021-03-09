@@ -215,7 +215,8 @@ class StructFormer(nn.Module):
             p.scatter_(2, deps[:, :, None], 1)
             return p, torch.zeros_like(p), h
 
-        logits = torch.bmm(child, parent.transpose(1,2))
+        scaling = self.emb_size ** -0.5
+        logits = torch.bmm(child, parent.transpose(1,2)) * scaling
         logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
@@ -298,5 +299,5 @@ class StructFormer(nn.Module):
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'child': child, 'head': p, 'root':raw_output[:, 0],
+            {'raw_output': raw_output, 'child': child, 'head': head, 'root':raw_output[:, 0],
             'loghead': logp.view(batch_size * length, -1)}
