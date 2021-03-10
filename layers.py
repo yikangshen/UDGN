@@ -232,7 +232,6 @@ class TransformerLayer(nn.Module):
         self.self_attn = MultiheadAttention(
             d_model, d_hidden, nhead, dropout=dropout, dropatt=dropatt)
 
-        self.norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, src, ctl=None, attn_mask=None, key_padding_mask=None):
@@ -246,7 +245,7 @@ class TransformerLayer(nn.Module):
           src3: the output of transformer layer, share the same shape as src.
         """
         src2 = self.self_attn(
-            self.norm(src), ctl=ctl, attn_mask=attn_mask, 
+            src, ctl=ctl, attn_mask=attn_mask, 
             key_padding_mask=key_padding_mask)
 
         src2 = src + self.dropout(src2)
