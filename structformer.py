@@ -170,7 +170,6 @@ class StructFormer(nn.Module):
         """Mask pad tokens."""
         visibility = (x != self.pad)
         visibility = visibility[:, None, :].expand(-1, x.size(1), -1)
-        visibility = torch.repeat_interleave(visibility, self.nhead, dim=0)
         return visibility
 
     @property
@@ -257,7 +256,7 @@ class StructFormer(nn.Module):
         rel_weight = self.rel_weight
 
         dep = torch.einsum('lhr,brij->lbhij', rel_weight, rel)
-        att_mask = dep.reshape(self.size_layers, bsz * self.nhead, length, length)
+        att_mask = dep.reshape(self.size_layers, bsz, self.nhead, length, length)
 
         return att_mask, cibling, head
 
@@ -269,13 +268,12 @@ class StructFormer(nn.Module):
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
-        h = h.transpose(0, 1)
-        parser_h = parser_h.transpose(0, 1)
+        logg = torch.zeros_like(x).float()
         for i in range(self.nlayers):
-            h = self.layers[i % self.size_layers](
+            h, logg = self.layers[i % self.size_layers](
                 h, parser_h, attn_mask=att_mask[i % self.size_layers],
-                key_padding_mask=visibility)
-        return h.transpose(0, 1)
+                key_padding_mask=visibility, prev_logg=logg)
+        return h
 
     def forward(self, x, pos, deps=None):
         """Pass the input through the encoder layer.

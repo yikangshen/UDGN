@@ -165,7 +165,7 @@ class MultiheadAttention(nn.Module):
           attn_output: self-attention output
         """
 
-        length, bsz, embed_dim = query.size()
+        bsz, length, embed_dim = query.size()
         assert embed_dim == self.embed_dim
 
         if ctl is None:
@@ -174,32 +174,32 @@ class MultiheadAttention(nn.Module):
             q, k = self.qk_proj(ctl).chunk(2, dim=-1)
         v, g = self.vg_proj(query).chunk(2, dim=-1)
 
-        q = q.contiguous().view(length, bsz * self.num_heads,
-                                self.head_dim).transpose(0, 1)
-        k = k.contiguous().view(length, bsz * self.num_heads,
-                                self.head_dim).transpose(0, 1)
-        v = v.contiguous().view(length, bsz * self.num_heads,
-                                self.value_dim).transpose(0, 1)
-        g = g.contiguous().view(length, bsz * self.num_heads,
-                                self.value_dim).transpose(0, 1)
+        q = q.contiguous().view(bsz, length, self.num_heads,
+                                self.head_dim).transpose(1, 2)
+        k = k.contiguous().view(bsz, length, self.num_heads,
+                                self.head_dim).transpose(1, 2)
+        v = v.contiguous().view(bsz, length, self.num_heads,
+                                self.head_dim).transpose(1, 2)
+        g = g.contiguous().view(bsz, length, self.num_heads,
+                                self.head_dim).transpose(1, 2)
 
-        attn_output_weights = torch.bmm(q, k.transpose(1, 2))
-        assert list(attn_output_weights.size()) == [bsz * self.num_heads, length, length]
+        attn_output_weights = torch.einsum('bhid,bhjd->bhij', q, k)
+        assert list(attn_output_weights.size()) == [bsz, self.num_heads, length, length]
 
         if key_padding_mask is not None:
-            attn_output_weights.masked_fill_(~key_padding_mask, -math.inf)
+            attn_output_weights.masked_fill_(~key_padding_mask[:, None, :, :], -math.inf)
         
         if attn_mask is None:
             scaling = self.head_dim ** -0.5
-            attn_output_weights = torch.softmax(attn_output_weights * scaling, dim=-1)
+            attn_output_weights = torch.softmax(attn_output_weights * scaling, dim=2)
         else:
-            assert list(attn_mask.size()) == [bsz * self.num_heads, length, length]
+            assert list(attn_mask.size()) == [bsz, self.num_heads, length, length]
             attn_output_weights = torch.sigmoid(attn_output_weights) * attn_mask
 
-        attn_output = torch.bmm(attn_output_weights, torch.tanh(v))
+        attn_output = torch.einsum('bhij,bhjd->bhid', attn_output_weights, torch.tanh(v))
         gated_output = attn_output * torch.sigmoid(g)
-        gated_output = gated_output.transpose(0, 1).contiguous().view(
-            length, bsz, self.hidden_dim)
+        gated_output = gated_output.transpose(1, 2).contiguous().view(
+            bsz, length, self.hidden_dim)
 
         output = self.out_proj(self.drop(gated_output))
 
@@ -232,9 +232,17 @@ class TransformerLayer(nn.Module):
         self.self_attn = MultiheadAttention(
             d_model, d_hidden, nhead, dropout=dropout, dropatt=dropatt)
 
-        self.dropout = nn.Dropout(dropout)
+        self.gate = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.ReLU(),
+            nn.Linear(d_model, 1),
+            nn.LogSigmoid(),
+        )
 
-    def forward(self, src, ctl=None, attn_mask=None, key_padding_mask=None):
+        self.dropout = nn.Dropout(dropout)
+        self.nhead = nhead
+
+    def forward(self, src, ctl=None, attn_mask=None, key_padding_mask=None, prev_logg=None):
         """Pass the input through the encoder layer.
 
         Args:
@@ -244,10 +252,14 @@ class TransformerLayer(nn.Module):
         Returns:
           src3: the output of transformer layer, share the same shape as src.
         """
+        logg = self.gate(src).squeeze(-1) + prev_logg
+        gate = logg.exp()
+        attn_mask = attn_mask * (1 - gate)[:, None, None, :]
+
         src2 = self.self_attn(
             src, ctl=ctl, attn_mask=attn_mask, 
             key_padding_mask=key_padding_mask)
 
-        src2 = src + self.dropout(src2)
+        src2 = src + self.dropout(src2) * gate[:, :, None]
 
-        return src2
+        return src2, logg
