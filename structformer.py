@@ -215,8 +215,7 @@ class StructFormer(nn.Module):
             p.scatter_(2, deps[:, :, None], 1)
             return p, torch.zeros_like(p), h
 
-        scaling = self.emb_size ** -0.5
-        logits = torch.bmm(child, parent.transpose(1,2)) * scaling
+        logits = torch.bmm(child, parent.transpose(1,2))
         logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
@@ -270,11 +269,11 @@ class StructFormer(nn.Module):
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
-        h = h.transpose(0, 1)
-        parser_h = parser_h.transpose(0, 1)
+        h = h.transpose(0, 1) + parser_h.transpose(0, 1)
+        # parser_h = parser_h.transpose(0, 1)
         for i in range(self.nlayers):
             h = self.layers[i % self.size_layers](
-                h, parser_h, attn_mask=att_mask[i % self.size_layers],
+                h, None, attn_mask=att_mask[i % self.size_layers],
                 key_padding_mask=visibility)
         return h.transpose(0, 1)
 

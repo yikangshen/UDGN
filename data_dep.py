@@ -177,23 +177,33 @@ class Corpus(object):
                 for s in trg_string_list:
                     g = DependencyGraph(s, top_relation_label='root', cell_extractor=extract_10_cells)
                     sen = []
-                    head = []
+                    sen_head = []
                     sen_label = []
+                    address_mapping = []
                     for address in range(1, len(g.nodes)):
                         node = g.nodes[address]
-                        w = node['word']
-                        w = w.lower()
-                        w = re.sub('[0-9]+', 'N', w)
-                        sen.append(w)
-                        if node['head'] > 0:
-                            head.append(node['head'] - 1)
+                        if node['tag'] in WORD_TAGS:
+                            w = node['word']
+                            w = w.lower()
+                            w = re.sub('[0-9]+', 'N', w)
+                            sen.append(w)
+                            head = node['head']
+                            while (not g.nodes[head]['tag'] in WORD_TAGS) and (head > 0):
+                                head = g.nodes[head]['head']
+                            if head > 0:
+                                sen_head.append(head - 1)
+                            else:
+                                sen_head.append(node['address'] - 1)
+                            sen_label.append(node['rel'])
+                            address_mapping.append(len(sen) - 1)
                         else:
-                            head.append(node['address'] - 1)
-                        sen_label.append(node['rel'])
+                            address_mapping.append(-1)
+
+                    sen_head = [address_mapping[ad] for ad in sen_head]
 
                     if len(sen) > 0:
                         sens.append(sen)
-                        heads.append(head)
+                        heads.append(sen_head)
                         labels.append(sen_label)
 
         if build_dict:

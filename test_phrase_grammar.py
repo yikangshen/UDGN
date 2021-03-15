@@ -54,6 +54,9 @@ def test(parser, corpus, device, prt=False, gap=0):
     idx2word = corpus.dictionary.idx2word
     dataset = zip(corpus.test, corpus.test_heads)
 
+    correct = 0.0
+    total = 0.0
+
     for x, deps in dataset:
         sen = [idx2word[idx] for idx in x]
         data = torch.LongTensor([x]).to(device)
@@ -64,6 +67,10 @@ def test(parser, corpus, device, prt=False, gap=0):
         head = p_dict['head']
 
         head = head.clone().squeeze(0).cpu().numpy()
+
+        pred = numpy.argmax(head, axis=1)
+        correct += (pred == deps).sum()
+        total += len(sen)
 
         new_words = []
         for w, ph in zip(sen, head):
@@ -128,15 +135,18 @@ def test(parser, corpus, device, prt=False, gap=0):
 
     print('-' * 89)
 
-    print('Dependency parsing performance:')
-    stanford_dda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=True)
-    stanford_uda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=False)
-    print('Stanford Style: %.3f DDA, %.3f UDA' % (stanford_dda, stanford_uda))
-    conll_dda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=True)
-    conll_uda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=False)
-    print('Conll Style: %.3f DDA, %.3f UDA' % (conll_dda, conll_uda))
+    # print('Dependency parsing performance:')
+    # stanford_dda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=True)
+    # stanford_uda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=False)
+    # print('Stanford Style: %.3f DDA, %.3f UDA' % (stanford_dda, stanford_uda))
+    # conll_dda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=True)
+    # conll_uda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=False)
+    # print('Conll Style: %.3f DDA, %.3f UDA' % (conll_dda, conll_uda))
 
-    return stanford_dda
+    dda = correct / total
+    print('Stanford Style: %.3f DDA' % (dda))
+
+    return dda
 
 
 if __name__ == '__main__':
