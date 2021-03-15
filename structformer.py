@@ -269,7 +269,7 @@ class StructFormer(nn.Module):
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
-        h = h.transpose(0, 1) + parser_h.transpose(0, 1)
+        h = h.transpose(0, 1)
         parser_h = parser_h.transpose(0, 1)
         for i in range(self.nlayers):
             h = self.layers[i % self.size_layers](
