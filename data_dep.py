@@ -170,7 +170,7 @@ class Corpus(object):
         heads = []
         labels = []
         for file_id_i in file_ids:
-            file_id_i = '/home/hmwv1114/nltk_data/corpora/ptb/' + file_id_i + '.dep'
+            file_id_i = os.path.expanduser("~") + '/nltk_data/corpora/ptb/' + file_id_i + '.dep'
             with open(file_id_i, 'r') as trg_file:
                 trg_string = trg_file.read().strip()
                 trg_string_list = trg_string.split('\n\n')
