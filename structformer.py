@@ -268,11 +268,10 @@ class StructFormer(nn.Module):
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
-        logg = torch.zeros_like(x).float()
         for i in range(self.nlayers):
-            h, logg = self.layers[i % self.size_layers](
+            h = self.layers[i % self.size_layers](
                 h, parser_h, attn_mask=att_mask[i % self.size_layers],
-                key_padding_mask=visibility, prev_logg=logg)
+                key_padding_mask=visibility)
         return h
 
     def forward(self, x, pos, deps=None):

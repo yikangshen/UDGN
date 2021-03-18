@@ -242,7 +242,7 @@ class TransformerLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.nhead = nhead
 
-    def forward(self, src, ctl=None, attn_mask=None, key_padding_mask=None, prev_logg=None):
+    def forward(self, src, ctl=None, attn_mask=None, key_padding_mask=None):
         """Pass the input through the encoder layer.
 
         Args:
@@ -252,14 +252,9 @@ class TransformerLayer(nn.Module):
         Returns:
           src3: the output of transformer layer, share the same shape as src.
         """
-        logg = self.gate(src).squeeze(-1) + prev_logg
-        gate = logg.exp()
-        attn_mask = attn_mask * (1 - gate)[:, None, None, :]
-
         src2 = self.self_attn(
             src, ctl=ctl, attn_mask=attn_mask, 
             key_padding_mask=key_padding_mask)
 
-        src2 = src + self.dropout(src2) * gate[:, :, None]
-
-        return src2, logg
+        src2 = src + self.dropout(src2)
+        return src2
