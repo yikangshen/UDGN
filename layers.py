@@ -232,13 +232,6 @@ class TransformerLayer(nn.Module):
         self.self_attn = MultiheadAttention(
             d_model, d_hidden, nhead, dropout=dropout, dropatt=dropatt)
 
-        self.gate = nn.Sequential(
-            nn.Linear(d_model, d_model),
-            nn.ReLU(),
-            nn.Linear(d_model, 1),
-            nn.LogSigmoid(),
-        )
-
         self.dropout = nn.Dropout(dropout)
         self.nhead = nhead
 
