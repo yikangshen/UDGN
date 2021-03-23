@@ -112,6 +112,7 @@ class StructFormer(nn.Module):
         self.drop = nn.Dropout(dropout)
 
         self.emb = nn.Embedding(ntokens, emb_size)
+        self.parser_emb = nn.Embedding(ntokens, emb_size)
         if pos_emb:
             self.pos_emb = nn.Embedding(500, emb_size)
 
@@ -155,6 +156,7 @@ class StructFormer(nn.Module):
         """Initialize token embedding and output bias."""
         initrange = 0.1
         self.emb.weight.data.uniform_(-initrange, initrange)
+        self.parser_emb.weight.data.uniform_(-initrange, initrange)
         if hasattr(self, 'pos_emb'):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
         self.output_layer.bias.data.fill_(0)
@@ -198,7 +200,7 @@ class StructFormer(nn.Module):
         lengths = mask.sum(1).cpu().int()
         visibility = mask[:, None, :].expand(-1, x.size(1), -1)
 
-        h = self.emb(x)
+        h = self.parser_emb(x)
         h = pack_padded_sequence(h, lengths, batch_first=True, enforce_sorted=False)
         h, _ = self.parser_layers(h)
         h, _ = pad_packed_sequence(h, batch_first=True)
