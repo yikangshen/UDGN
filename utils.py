@@ -34,7 +34,7 @@ def batchify(idxs, heads, bsz, device, pad=0, shuffle=True):
     def get_batch(source, i, batch_size, pad=0):
         total_length = 0
         data = []
-        while total_length < batch_size and i < len(source):
+        while i < len(source) and total_length + len(source[i]) < batch_size:
             data.append(source[i])
             total_length += len(source[i])
             i += 1
