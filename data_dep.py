@@ -138,7 +138,7 @@ class Corpus(object):
                 valid_file_ids.append(file_id)
             if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/24/WSJ_2499.MRG':
                 test_file_ids.append(file_id)
-            if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/24/WSJ_2399.MRG':
+            if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/23/WSJ_2399.MRG':
                 parser_test_file_ids.append(file_id)
 
         self.train, self.train_heads, self.train_labels \
