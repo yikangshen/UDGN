@@ -52,7 +52,7 @@ def test(parser, corpus, device, prt=False, gap=0):
     nsens = 0
 
     idx2word = corpus.dictionary.idx2word
-    dataset = zip(corpus.test, corpus.test_heads)
+    dataset = zip(corpus.parser_test, corpus.parser_test_heads)
 
     correct = 0.0
     total = 0.0

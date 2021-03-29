@@ -130,17 +130,16 @@ class Corpus(object):
         train_file_ids = []
         valid_file_ids = []
         test_file_ids = []
-        rest_file_ids = []
+        parser_test_file_ids = []
         for file_id in all_file_ids:
-            if 'WSJ/00/WSJ_0200.MRG' <= file_id <= 'WSJ/21/WSJ_2199.MRG':
+            if 'WSJ/00/WSJ_0000.MRG' <= file_id <= 'WSJ/20/WSJ_2099.MRG':
                 train_file_ids.append(file_id)
-            if 'WSJ/22/WSJ_2200.MRG' <= file_id <= 'WSJ/22/WSJ_2299.MRG':
+            if 'WSJ/21/WSJ_2100.MRG' <= file_id <= 'WSJ/22/WSJ_2299.MRG':
                 valid_file_ids.append(file_id)
-            if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/23/WSJ_2399.MRG':
+            if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/24/WSJ_2499.MRG':
                 test_file_ids.append(file_id)
-            elif ('WSJ/00/WSJ_0000.MRG' <= file_id <= 'WSJ/01/WSJ_0199.MRG') or \
-                    ('WSJ/24/WSJ_2400.MRG' <= file_id <= 'WSJ/24/WSJ_2499.MRG'):
-                rest_file_ids.append(file_id)
+            if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/24/WSJ_2399.MRG':
+                parser_test_file_ids.append(file_id)
 
         self.train, self.train_heads, self.train_labels \
             = self.tokenize(train_file_ids, build_dict, build_label)
@@ -148,6 +147,8 @@ class Corpus(object):
             = self.tokenize(valid_file_ids)
         self.test, self.test_heads, self.test_labels \
             = self.tokenize(test_file_ids)
+        self.parser_test, self.parser_test_heads, self.parser_test_labels \
+            = self.tokenize(parser_test_file_ids)
 
         if build_dict:
             print('Saving dictionary...')
@@ -187,6 +188,7 @@ class Corpus(object):
                             w = w.lower()
                             w = re.sub('[0-9]+', 'N', w)
                             sen.append(w)
+                            
                             head = node['head']
                             while (not g.nodes[head]['tag'] in WORD_TAGS) and (head > 0):
                                 head = g.nodes[head]['head']
