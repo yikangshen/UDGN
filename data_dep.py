@@ -20,7 +20,6 @@ import os
 import pickle
 import re
 
-import nltk
 from nltk import DependencyGraph
 from nltk.corpus import ptb
 
