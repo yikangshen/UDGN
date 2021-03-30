@@ -270,9 +270,10 @@ class StructFormer(nn.Module):
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
+        h = self.drop(h)
         for i in range(self.nlayers):
             h = self.layers[i % self.size_layers](
-                h, parser_h, attn_mask=att_mask[i % self.size_layers],
+                h, None, attn_mask=att_mask[i % self.size_layers],
                 key_padding_mask=visibility)
         return h
 

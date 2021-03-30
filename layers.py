@@ -185,16 +185,19 @@ class MultiheadAttention(nn.Module):
 
         attn_output_weights = torch.einsum('bhid,bhjd->bhij', q, k)
         assert list(attn_output_weights.size()) == [bsz, self.num_heads, length, length]
-
-        if key_padding_mask is not None:
-            attn_output_weights.masked_fill_(~key_padding_mask[:, None, :, :], -math.inf)
         
         if attn_mask is None:
+            if key_padding_mask is not None:
+                attn_output_weights.masked_fill_(~key_padding_mask[:, None, :, :], -math.inf)
             scaling = self.head_dim ** -0.5
             attn_output_weights = torch.softmax(attn_output_weights * scaling, dim=2)
         else:
             assert list(attn_mask.size()) == [bsz, self.num_heads, length, length]
-            attn_output_weights = torch.sigmoid(attn_output_weights) * attn_mask
+            scaling = self.head_dim ** -0.5
+            attn_output_weights = attn_output_weights * scaling
+            attn_output_weights = torch.softmax(attn_output_weights, dim=1) * attn_mask
+            if key_padding_mask is not None:
+                attn_output_weights.masked_fill_(~key_padding_mask[:, None, :, :], 0)
 
         attn_output = torch.einsum('bhij,bhjd->bhid', attn_output_weights, torch.tanh(v))
         gated_output = attn_output * torch.sigmoid(g)
