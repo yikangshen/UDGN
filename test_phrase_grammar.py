@@ -17,15 +17,11 @@
 """Test grammar induction performance of StructFormer."""
 
 import argparse
-import collections
 
-import matplotlib.pyplot as plt
 import numpy
 import torch
-from nltk.parse import DependencyGraph
 
 import data_dep
-import tree_utils
 from hinton import plot
 
 
@@ -72,76 +68,19 @@ def test(parser, corpus, device, prt=False, gap=0):
         correct += (pred == deps).sum()
         total += len(sen)
 
-        new_words = []
-        for w, ph in zip(sen, head):
-            new_words.append({
-                'address': len(new_words) + 1,
-                'word': w,
-                'lemma': None,
-                'ctag': None,
-                'tag': None,
-                'feats': None,
-                'head': numpy.argmax(ph) + 1,
-                'deps': collections.defaultdict(list),
-                'rel': None,
-            })
-
-        dtree = DependencyGraph()
-        for w in new_words:
-            dtree.add_node(w)
-
-        dtree_list.append(dtree)
-
-        if prt and len(dtree_list) % 100 == 0:
-            child = child.clone().squeeze(0).cpu().numpy()
-            for word_i, child_i, head_i in zip(
-                    sen, child, head):
-                print('%20s\t%s\t%s' %
-                      (word_i,
-                       plot(head_i, max_val=1), plot(child_i, max_val=1.)))
-            print(dtree.to_conll(10))
-            print()
-
-            # fig_i, ax_i = plt.subplots()
-            # im = ax_i.imshow(head)
-            
-            # ax_i.set_xticks(numpy.arange(len(sen)))
-            # ax_i.set_yticks(numpy.arange(len(sen)))
-            # ax_i.set_xticklabels(sen)
-            # ax_i.set_yticklabels(sen)
-
-            # plt.setp(
-            #     ax_i.get_xticklabels(),
-            #     rotation=45,
-            #     ha='right',
-            #     rotation_mode='anchor')
-
-            # for row in range(len(sen)):
-            #     for col in range(len(sen)):
-            #         _ = ax_i.text(
-            #             col,
-            #             row,
-            #             '%.2f' % (head[row, col]),
-            #             ha='center',
-            #             va='center',
-            #             color='w')
-            # fig_i.tight_layout()
-            # plt.savefig(
-            #     './figures/sentence-%d.png' % (len(dtree_list)),
-            #     dpi=300,
-            #     format='png')
-
         nsens += 1
 
-    print('-' * 89)
+        if prt and nsens % 100 == 0:
+            child = child.clone().squeeze(0).cpu().numpy()
+            index = list(range(len(sen)))
+            for id_i, word_i, pred_i, deps_i, child_i, head_i in zip(
+                    index, sen, pred, deps, child, head):
+                print('%2d\t%20s\t%2d\t%2d\t%s\t%s' %
+                      (id_i, word_i, pred_i, deps_i,
+                       plot(head_i, max_val=1), plot(child_i, max_val=1.)))
+            print()
 
-    # print('Dependency parsing performance:')
-    # stanford_dda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=True)
-    # stanford_uda = tree_utils.evald(dtree_list, './data/dependency/test.stanford', directed=False)
-    # print('Stanford Style: %.3f DDA, %.3f UDA' % (stanford_dda, stanford_uda))
-    # conll_dda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=True)
-    # conll_uda = tree_utils.evald(dtree_list, './data/dependency/test.conll', directed=False)
-    # print('Conll Style: %.3f DDA, %.3f UDA' % (conll_dda, conll_uda))
+    print('-' * 89)
 
     dda = correct / total
     print('Stanford Style: %.3f DDA' % (dda))
@@ -200,7 +139,6 @@ if __name__ == '__main__':
     print('=' * 89)
 
     rel_weight = model.rel_weight.detach().cpu().numpy()
-    # fig, axs = plt.subplots(rel_weight.shape[0], rel_weight.shape[1], sharex=True, sharey=True)
 
     names = model.relations
 
@@ -208,11 +146,5 @@ if __name__ == '__main__':
         for j in range(rel_weight.shape[1]):
             print(plot(rel_weight[i, j], max_val=1.), end=' ')
             values = rel_weight[i, j]
-            # if i == 0:
-            #     axs[i, j].set_title('%d' % (j,))
-            # if j == 0:
-            #     axs[i, j].set_ylabel('%d' % (i,))
-            # axs[i, j].bar(names, values)
         print()
 
-    # plt.savefig('./figures/mask_weights.png', dpi=300, format='png')
