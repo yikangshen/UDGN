@@ -223,6 +223,25 @@ def evaluate(data_source, heads_source):
     return total_loss / total_count, total_corr / total_words
 
 
+@torch.no_grad()
+def evaluate_parser(data_source, heads_source):
+    """Evaluate the model on given dataset."""
+    model.eval()
+    total_corr = 0
+    total_words = 0
+    for data, heads in zip(data_source, heads_source):
+        pos = torch.arange(data.size(1), device=device)[None, :]
+
+        output, p_dict = model(data, pos, heads if args.ground_truth else None)
+
+        loghead = p_dict['loghead']
+        pred = loghead.argmax(-1)
+        total_corr += (pred == heads.reshape(-1)).float().sum().data
+        total_words += (heads > -1).float().sum().data
+
+    return total_corr / total_words
+
+
 def train():
     """One epoch of training."""
     model.train()
@@ -291,7 +310,8 @@ try:
 
         train()
 
-        val_loss, val_acc = evaluate(val_data, val_heads)
+        val_loss, _ = evaluate(val_data, val_heads)
+        val_acc = evaluate_parser(val_data, val_heads)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
               'valid ppl {:8.2f} | valid UAS {:5.3f}'.format(
@@ -315,7 +335,8 @@ except KeyboardInterrupt:
 model_load(args.save)
 
 # Run on test data.
-test_loss, test_acc = evaluate(test_data, test_heads)
+test_loss, _ = evaluate(test_data, test_heads)
+test_acc = evaluate_parser(test_data, test_heads)
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
       'test UAS {:8.3f}'.format(test_loss, math.exp(test_loss),
