@@ -186,6 +186,8 @@ class StructFormer(nn.Module):
             return torch.sigmoid(self._rel_weight)
         elif self.weight_act == 'softmax':
             return torch.softmax(self._rel_weight, dim=-1)
+        elif self.weight_act == 'ones':
+            return torch.ones_like(self._rel_weight)
 
     def parse(self, x, pos, deps=None):
         """Parse input sentence.
