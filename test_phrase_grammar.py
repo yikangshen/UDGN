@@ -147,4 +147,3 @@ if __name__ == '__main__':
             print(plot(rel_weight[i, j], max_val=1.), end=' ')
             values = rel_weight[i, j]
         print()
-

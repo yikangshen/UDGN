@@ -17,6 +17,7 @@
 """Convolution and transformer layers used by StructFormer."""
 
 import math
+
 import torch
 from torch import nn
 from torch.nn import init
@@ -43,7 +44,8 @@ class PositionalEncoding(nn.Module):
 
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        div_term = torch.exp(torch.arange(
+            0, d_model, 2).float() * (-math.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0).transpose(0, 1)
@@ -184,22 +186,29 @@ class MultiheadAttention(nn.Module):
                                 self.head_dim).transpose(1, 2)
 
         attn_output_weights = torch.einsum('bhid,bhjd->bhij', q, k)
-        assert list(attn_output_weights.size()) == [bsz, self.num_heads, length, length]
-        
+        assert list(attn_output_weights.size()) == [
+            bsz, self.num_heads, length, length]
+
         if attn_mask is None:
             if key_padding_mask is not None:
-                attn_output_weights.masked_fill_(~key_padding_mask[:, None, :, :], -math.inf)
+                attn_output_weights.masked_fill_(
+                    ~key_padding_mask[:, None, :, :], -math.inf)
             scaling = self.head_dim ** -0.5
-            attn_output_weights = torch.softmax(attn_output_weights * scaling, dim=2)
+            attn_output_weights = torch.softmax(
+                attn_output_weights * scaling, dim=2)
         else:
-            assert list(attn_mask.size()) == [bsz, self.num_heads, length, length]
+            assert list(attn_mask.size()) == [
+                bsz, self.num_heads, length, length]
             scaling = self.head_dim ** -0.5
             attn_output_weights = attn_output_weights * scaling
-            attn_output_weights = torch.softmax(attn_output_weights, dim=1) * attn_mask
+            attn_output_weights = torch.softmax(
+                attn_output_weights, dim=1) * attn_mask
             if key_padding_mask is not None:
-                attn_output_weights.masked_fill_(~key_padding_mask[:, None, :, :], 0)
+                attn_output_weights.masked_fill_(
+                    ~key_padding_mask[:, None, :, :], 0)
 
-        attn_output = torch.einsum('bhij,bhjd->bhid', attn_output_weights, torch.tanh(v))
+        attn_output = torch.einsum(
+            'bhij,bhjd->bhid', attn_output_weights, torch.tanh(v))
         gated_output = attn_output * torch.sigmoid(g)
         gated_output = gated_output.transpose(1, 2).contiguous().view(
             bsz, length, self.hidden_dim)
@@ -249,7 +258,7 @@ class TransformerLayer(nn.Module):
           src3: the output of transformer layer, share the same shape as src.
         """
         src2 = self.self_attn(
-            src, ctl=ctl, attn_mask=attn_mask, 
+            src, ctl=ctl, attn_mask=attn_mask,
             key_padding_mask=key_padding_mask)
 
         src2 = src + self.dropout(src2)

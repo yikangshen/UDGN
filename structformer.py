@@ -16,7 +16,8 @@
 # Lint as: python3
 """StructFormer and transformer model."""
 
-from math import inf, log
+from math import inf
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -131,14 +132,15 @@ class StructFormer(nn.Module):
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
 
-        self.parser_layers = nn.LSTM(emb_size, emb_size // 2, n_parser_layers, 
-            dropout=dropout, batch_first=True, bidirectional=True)
+        self.parser_layers = nn.LSTM(emb_size, emb_size // 2, n_parser_layers,
+                                     dropout=dropout, batch_first=True, bidirectional=True)
 
         self.parent_ff = nn.Linear(emb_size, emb_size)
         self.child_ff = nn.Linear(emb_size, emb_size)
 
         n_rel = len(relations)
-        self._rel_weight = nn.Parameter(torch.zeros((self.size_layers, nhead, n_rel)))
+        self._rel_weight = nn.Parameter(
+            torch.zeros((self.size_layers, nhead, n_rel)))
         self._scaler = nn.Parameter(torch.zeros(2))
 
         self.n_parse_layers = n_parser_layers
@@ -201,7 +203,8 @@ class StructFormer(nn.Module):
         visibility = mask[:, None, :].expand(-1, x.size(1), -1)
 
         h = self.parser_emb(x)
-        h = pack_padded_sequence(h, lengths, batch_first=True, enforce_sorted=False)
+        h = pack_padded_sequence(
+            h, lengths, batch_first=True, enforce_sorted=False)
         h, _ = self.parser_layers(h)
         h, _ = pad_packed_sequence(h, batch_first=True)
 
@@ -216,7 +219,7 @@ class StructFormer(nn.Module):
             p.scatter_(2, deps[:, :, None], 1)
             return p, torch.zeros_like(p), h
 
-        logits = torch.bmm(child, parent.transpose(1,2))
+        logits = torch.bmm(child, parent.transpose(1, 2))
         logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
@@ -258,7 +261,8 @@ class StructFormer(nn.Module):
         rel_weight = self.rel_weight
 
         dep = torch.einsum('lhr,brij->lbhij', rel_weight, rel)
-        att_mask = dep.reshape(self.size_layers, bsz, self.nhead, length, length)
+        att_mask = dep.reshape(self.size_layers, bsz,
+                               self.nhead, length, length)
 
         return att_mask, cibling, head
 
@@ -300,5 +304,5 @@ class StructFormer(nn.Module):
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'child': child, 'head': head, 'root':raw_output[:, 0],
-            'loghead': logp.view(batch_size * length, -1)}
+            {'raw_output': raw_output, 'child': child, 'head': head, 'root': raw_output[:, 0],
+             'loghead': logp.view(batch_size * length, -1)}

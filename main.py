@@ -30,7 +30,6 @@ from orion.client import report_objective
 
 import data_dep
 import structformer
-import test_phrase_grammar
 from utils import batchify
 
 parser = argparse.ArgumentParser(
@@ -142,8 +141,10 @@ pad_token = corpus.dictionary.word2idx['<pad>']
 mask_token = corpus.dictionary.word2idx['<mask>']
 unk_token = corpus.dictionary.word2idx['<unk>']
 
-val_data, val_heads = batchify(corpus.valid, corpus.valid_heads, args.batch_size, device, pad=pad_token)
-test_data, test_heads = batchify(corpus.test, corpus.test_heads, args.batch_size, device, pad=pad_token)
+val_data, val_heads = batchify(
+    corpus.valid, corpus.valid_heads, args.batch_size, device, pad=pad_token)
+test_data, test_heads = batchify(
+    corpus.test, corpus.test_heads, args.batch_size, device, pad=pad_token)
 
 ###############################################################################
 # Build the model
@@ -155,14 +156,14 @@ head_criterion = nn.CrossEntropyLoss(ignore_index=-1)
 ntokens = len(corpus.dictionary)
 print('Number of tokens: ', ntokens)
 model = structformer.StructFormer(
-    emb_size = args.nemb,
-    head_size = args.nhid,
-    nlayers = args.nlayers,
-    ntokens = ntokens,
-    nhead = args.nheads,
-    dropout = args.dropout,
-    dropatt = args.dropatt,
-    pos_emb = args.pos_emb,
+    emb_size=args.nemb,
+    head_size=args.nhid,
+    nlayers=args.nlayers,
+    ntokens=ntokens,
+    nhead=args.nheads,
+    dropout=args.dropout,
+    dropatt=args.dropatt,
+    pos_emb=args.pos_emb,
     pad=pad_token,
     n_parser_layers=args.n_parser_layers,
     relations=args.relations.split(','),
@@ -340,5 +341,5 @@ test_acc = evaluate_parser(test_data, test_heads)
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
       'masked UAS {:5.3f} | test UAS {:8.3f}'.format(test_loss, math.exp(test_loss),
-                                test_masked_acc, test_acc))
+                                                     test_masked_acc, test_acc))
 print('=' * 89)

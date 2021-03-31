@@ -170,12 +170,14 @@ class Corpus(object):
         heads = []
         labels = []
         for file_id_i in file_ids:
-            file_id_i = os.path.expanduser("~") + '/nltk_data/corpora/ptb/' + file_id_i + '.dep'
+            file_id_i = os.path.expanduser(
+                "~") + '/nltk_data/corpora/ptb/' + file_id_i + '.dep'
             with open(file_id_i, 'r') as trg_file:
                 trg_string = trg_file.read().strip()
                 trg_string_list = trg_string.split('\n\n')
                 for s in trg_string_list:
-                    g = DependencyGraph(s, top_relation_label='root', cell_extractor=extract_10_cells)
+                    g = DependencyGraph(
+                        s, top_relation_label='root', cell_extractor=extract_10_cells)
                     sen = []
                     sen_head = []
                     sen_label = []
@@ -187,7 +189,7 @@ class Corpus(object):
                             w = w.lower()
                             w = re.sub('[0-9]+', 'N', w)
                             sen.append(w)
-                            
+
                             head = node['head']
                             while (not g.nodes[head]['tag'] in WORD_TAGS) and (head > 0):
                                 head = g.nodes[head]['head']
