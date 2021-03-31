@@ -132,6 +132,7 @@ class MultiheadAttention(nn.Module):
 
         self.num_heads = num_heads
         self.drop = nn.Dropout(dropout)
+        self.dropatt = nn.Dropout(dropatt)
         self.head_dim = head_dim
         self.value_dim = head_dim
 
@@ -206,6 +207,8 @@ class MultiheadAttention(nn.Module):
             if key_padding_mask is not None:
                 attn_output_weights.masked_fill_(
                     ~key_padding_mask[:, None, :, :], 0)
+
+        attn_output_weights = self.dropatt(attn_output_weights)
 
         attn_output = torch.einsum(
             'bhij,bhjd->bhid', attn_output_weights, torch.tanh(v))
