@@ -213,7 +213,7 @@ class MultiheadAttention(nn.Module):
         gated_output = gated_output.transpose(1, 2).contiguous().view(
             bsz, length, self.hidden_dim)
 
-        output = self.out_proj(self.drop(gated_output))
+        output = self.out_proj(gated_output)
 
         return output
 
