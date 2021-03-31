@@ -77,7 +77,7 @@ parser.add_argument(
     help='dropout for rnn layers (0 = no dropout)')
 parser.add_argument('--pos_emb', action='store_true', help='use CUDA')
 parser.add_argument(
-    '--weight_act', type=str, default='sigmoid', help='use CUDA')
+    '--weight_act', type=str, default='ones', help='use CUDA')
 parser.add_argument(
     '--relations', type=str, default='head,child', help='relation list')
 parser.add_argument('--seed', type=int, default=1111, help='random seed')
