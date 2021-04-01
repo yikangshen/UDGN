@@ -236,7 +236,6 @@ class StructFormer(nn.Module):
         eye = eye[None, :, :].expand((bsz, -1, -1))
         head = p.masked_fill(eye, 0)
         child = head.transpose(1, 2)
-        cibling = torch.bmm(head, child).masked_fill(eye, 0)
 
         rel_list = []
         if 'eye' in self.relations:
@@ -246,6 +245,7 @@ class StructFormer(nn.Module):
         if 'child' in self.relations:
             rel_list.append(child)
         if 'cibling' in self.relations:
+            cibling = torch.bmm(head, child).masked_fill(eye, 0)
             rel_list.append(cibling)
         if 'ancester' in self.relations:
             ancester = torch.bmm(head, head).masked_fill(eye, 0)
@@ -266,7 +266,7 @@ class StructFormer(nn.Module):
         att_mask = dep.reshape(self.size_layers, bsz,
                                self.nhead, length, length)
 
-        return att_mask, cibling, head
+        return att_mask, child, head
 
     def encode(self, x, pos, att_mask, parser_h):
         """Structformer encoding process."""

@@ -214,8 +214,8 @@ def evaluate(data_source, heads_source):
         total_loss += loss.data * count
         total_count += count
 
-        loghead = p_dict['loghead']
-        pred = loghead.argmax(-1)
+        head = p_dict['head']
+        pred = head.argmax(-1)
         total_corr += (pred == heads.reshape(-1)).float().sum().data
         total_words += (heads > -1).float().sum().data
 
@@ -233,8 +233,8 @@ def evaluate_parser(data_source, heads_source):
 
         _, p_dict = model(data, pos, heads if args.ground_truth else None)
 
-        loghead = p_dict['loghead']
-        pred = loghead.argmax(-1)
+        head = p_dict['head']
+        pred = head.argmax(-1)
         total_corr += (pred == heads.reshape(-1)).float().sum().data
         total_words += (heads > -1).float().sum().data
 
