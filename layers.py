@@ -186,7 +186,7 @@ class MultiheadAttention(nn.Module):
         g = g.contiguous().view(bsz, length, self.num_heads,
                                 self.head_dim).transpose(1, 2)
 
-        attn_output_weights = torch.einsum('bhid,bhjd->bhij', q, k)
+        attn_output_weights = torch.einsum('bhid,bhjd->bhij', q, self.drop(k))
         assert list(attn_output_weights.size()) == [
             bsz, self.num_heads, length, length]
 
@@ -216,7 +216,7 @@ class MultiheadAttention(nn.Module):
         gated_output = gated_output.transpose(1, 2).contiguous().view(
             bsz, length, self.hidden_dim)
 
-        output = self.out_proj(gated_output)
+        output = self.out_proj(self.drop(gated_output))
 
         return output
 
