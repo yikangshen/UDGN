@@ -143,6 +143,8 @@ val_data, val_heads = batchify(
     corpus.valid, corpus.valid_heads, args.batch_size, device, pad=pad_token)
 test_data, test_heads = batchify(
     corpus.test, corpus.test_heads, args.batch_size, device, pad=pad_token)
+parser_test_data, parser_test_heads = batchify(
+    corpus.parser_test, corpus.parser_test_heads, args.batch_size, device, pad=pad_token)
 
 ###############################################################################
 # Build the model
@@ -335,9 +337,9 @@ model_load(args.save)
 
 # Run on test data.
 test_loss, test_masked_acc = evaluate(test_data, test_heads)
-test_acc = evaluate_parser(test_data, test_heads)
+parser_test_acc = evaluate_parser(parser_test_data, parser_test_heads)
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
       'masked UAS {:5.3f} | test UAS {:8.3f}'.format(test_loss, math.exp(test_loss),
-                                                     test_masked_acc, test_acc))
+                                                     test_masked_acc, parser_test_acc))
 print('=' * 89)
