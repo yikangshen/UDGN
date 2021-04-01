@@ -216,7 +216,7 @@ def evaluate(data_source, heads_source):
 
         head = p_dict['head']
         pred = head.argmax(-1)
-        total_corr += (pred == heads.reshape(-1)).float().sum().data
+        total_corr += (pred == heads).float().sum().data
         total_words += (heads > -1).float().sum().data
 
     return total_loss / total_count, total_corr / total_words
@@ -235,7 +235,7 @@ def evaluate_parser(data_source, heads_source):
 
         head = p_dict['head']
         pred = head.argmax(-1)
-        total_corr += (pred == heads.reshape(-1)).float().sum().data
+        total_corr += (pred == heads).float().sum().data
         total_words += (heads > -1).float().sum().data
 
     return total_corr / total_words
