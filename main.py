@@ -96,9 +96,7 @@ parser.add_argument('--wdecay', type=float, default=1.2e-6,
                     help='weight decay applied to all weights')
 parser.add_argument('--resume', type=str, default='',
                     help='path of model to resume')
-parser.add_argument('--test_grammar', action='store_true', help='test grammar')
 args = parser.parse_args()
-args.tied = True
 
 # Set the random seed manually for reproducibility.
 np.random.seed(args.seed)
