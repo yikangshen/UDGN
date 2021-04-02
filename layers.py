@@ -212,7 +212,7 @@ class MultiheadAttention(nn.Module):
         attn_output_weights = self.dropatt(attn_output_weights)
 
         attn_output = torch.einsum(
-            'bhij,bhjd->bhid', attn_output_weights, F.elu(v))
+            'bhij,bhjd->bhid', attn_output_weights, F.tanh(v))
         gated_output = attn_output * torch.sigmoid(g)
         gated_output = gated_output.transpose(1, 2).contiguous().view(
             bsz, length, self.hidden_dim)
