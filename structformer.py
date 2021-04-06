@@ -132,11 +132,11 @@ class StructFormer(nn.Module):
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
 
-        self.parser_layers = nn.LSTM(emb_size, emb_size // 2, n_parser_layers,
+        self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
 
-        self.parent_ff = nn.Linear(emb_size, emb_size)
-        self.child_ff = nn.Linear(emb_size, emb_size)
+        self.parent_ff = nn.Linear(emb_size * 2, emb_size)
+        self.child_ff = nn.Linear(emb_size * 2, emb_size)
 
         n_rel = len(relations)
         self._rel_weight = nn.Parameter(
