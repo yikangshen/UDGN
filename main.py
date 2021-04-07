@@ -47,7 +47,7 @@ parser.add_argument(
     '--nhid', type=int, default=128, help='number of hidden units per layer')
 parser.add_argument('--nlayers', type=int, default=8, help='number of layers')
 parser.add_argument(
-    '--n_parser_layers', type=int, default=2, help='number of layers')
+    '--n_parser_layers', type=int, default=3, help='number of layers')
 parser.add_argument('--nheads', type=int, default=8, help='number of layers')
 parser.add_argument(
     '--lr', type=float, default=0.0003, help='initial learning rate')
@@ -63,7 +63,7 @@ parser.add_argument(
 parser.add_argument(
     '--dropout',
     type=float,
-    default=0.1,
+    default=0.2,
     help='dropout for rnn layers (0 = no dropout)')
 parser.add_argument(
     '--dropatt',
