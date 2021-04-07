@@ -343,3 +343,5 @@ print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
       'masked UAS {:5.3f} | test UAS {:8.3f}'.format(test_loss, math.exp(test_loss),
                                                      test_masked_acc, parser_test_acc))
 print('=' * 89)
+
+report_objective(parser_test_acc, name='UAS')
