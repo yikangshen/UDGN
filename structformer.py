@@ -205,6 +205,7 @@ class StructFormer(nn.Module):
         visibility = mask[:, None, :].expand(-1, x.size(1), -1)
 
         h = self.parser_emb(x)
+        h = self.drop(h)
         h = pack_padded_sequence(
             h, lengths, batch_first=True, enforce_sorted=False)
         h, _ = self.parser_layers(h)
