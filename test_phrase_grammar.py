@@ -22,6 +22,7 @@ import numpy
 import torch
 
 import data_dep
+import edmonds
 from hinton import plot
 
 
@@ -30,7 +31,7 @@ def mean(x):
 
 
 @torch.no_grad()
-def test(parser, corpus, device, prt=False, gap=0):
+def test(parser, corpus, device, prt=False, mode='tree'):
     """Compute UF1 and UAS scores.
 
     Args:
@@ -64,7 +65,13 @@ def test(parser, corpus, device, prt=False, gap=0):
 
         head = head.clone().squeeze(0).cpu().numpy()
 
-        pred = numpy.argmax(head, axis=1)
+        if mode == 'argmax':
+            pred = numpy.argmax(head, axis=1)
+        elif mode == 'tree':
+            pred = edmonds.single_root_msa(numpy.log(head))
+        else:
+            raise Exception
+        
         correct += (pred == deps).sum()
         total += len(sen)
 
@@ -106,11 +113,14 @@ if __name__ == '__main__':
         type=str,
         default='PTB.pt',
         help='model checkpoint to use')
+    argpr.add_argument(
+        '--mode',
+        type=str,
+        default='tree',
+        help='rule to find the head')
     argpr.add_argument('--seed', type=int, default=1111, help='random seed')
-    argpr.add_argument('--gap', type=float, default=0, help='random seed')
     argpr.add_argument('--print', action='store_true', help='use CUDA')
     argpr.add_argument('--cuda', action='store_true', help='use CUDA')
-    argpr.add_argument('--wsj10', action='store_true', help='use WSJ10')
     args = argpr.parse_args()
 
     # Set the random seed manually for reproducibility.
@@ -135,7 +145,7 @@ if __name__ == '__main__':
         eval_device = torch.device('cpu')
 
     print('=' * 89)
-    test(model, ptb_corpus, eval_device, prt=args.print, gap=args.gap)
+    test(model, ptb_corpus, eval_device, prt=args.print, mode=args.mode)
     print('=' * 89)
 
     rel_weight = model.rel_weight.detach().cpu().numpy()
