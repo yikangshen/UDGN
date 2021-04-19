@@ -222,7 +222,8 @@ class StructFormer(nn.Module):
             p.scatter_(2, deps[:, :, None], 1)
             return p, torch.zeros_like(p), h
 
-        logits = torch.bmm(child, parent.transpose(1, 2))
+        scaling = self.emb_size ** -0.5
+        logits = torch.bmm(child, parent.transpose(1, 2)) * scaling
         logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
