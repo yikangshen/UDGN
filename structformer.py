@@ -217,13 +217,15 @@ class StructFormer(nn.Module):
         head = p.masked_fill(eye, 0)
         child = head.transpose(1, 2)
 
-        att_mask = head + child
-        att_mask = att_mask[None, :, None, :, :].repeat(self.nlayers, 1, self.nhead, 1, 1)
+        mask = head + child
 
-        return att_mask, child + head, head
+        return mask, head
 
     def encode(self, x, pos, att_mask, parser_h):
         """Structformer encoding process."""
+
+        # For better gradient
+        att_mask = att_mask[None, :, None, :, :].repeat(self.nlayers, 1, self.nhead, 1, 1)
 
         visibility = self.visibility(x)
         h = self.emb(x)
@@ -251,7 +253,7 @@ class StructFormer(nn.Module):
         batch_size, length = x.size()
 
         p, logp, parser_h = self.parse(x, deps)
-        att_mask, child, head = self.generate_mask(p)
+        att_mask, head = self.generate_mask(p)
 
         raw_output = self.encode(x, pos, att_mask, parser_h)
         raw_output = self.norm(raw_output)
@@ -260,5 +262,5 @@ class StructFormer(nn.Module):
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'child': child, 'head': head, 'root': raw_output[:, 0],
+            {'raw_output': raw_output, 'att_mask': att_mask, 'head': head, 'root': raw_output[:, 0],
              'loghead': logp.view(batch_size * length, -1)}
