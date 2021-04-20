@@ -141,6 +141,9 @@ class MultiheadAttention(nn.Module):
         self.vg_proj = nn.Linear(embed_dim, self.hidden_dim * 2, bias=bias)
         self.out_proj = nn.Linear(self.hidden_dim, embed_dim, bias=bias)
 
+        self.forward_bias = nn.Parameter(torch.zeros(num_heads))
+        self.backward_bias = nn.Parameter(torch.zeros(num_heads))
+
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -188,6 +191,8 @@ class MultiheadAttention(nn.Module):
                                 self.head_dim).transpose(1, 2)
 
         attn_output_weights = torch.einsum('bhid,bhjd->bhij', q, k)
+        attn_output_weights = (attn_output_weights + self.backward_bias[None, :, None, None]).tril(-1) \
+            + (attn_output_weights + self.forward_bias[None, :, None, None]).triu(1)
         assert list(attn_output_weights.size()) == [
             bsz, self.num_heads, length, length]
 
