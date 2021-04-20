@@ -84,11 +84,10 @@ class StructFormer(nn.Module):
                  ntokens,
                  nhead=8,
                  dropout=0.1,
-                 dropatt=0.1,
+                 dropatt=0,
                  pos_emb=False,
                  pad=0,
-                 n_parser_layers=4,
-                 relations=('head', 'child'),
+                 n_parser_layers=3,
                  weight_act='softmax',
                  share_params=False):
         """Initialization.
@@ -138,14 +137,8 @@ class StructFormer(nn.Module):
         self.parent_ff = nn.Linear(emb_size * 2, emb_size)
         self.child_ff = nn.Linear(emb_size * 2, emb_size)
 
-        n_rel = len(relations)
-        self._rel_weight = nn.Parameter(
-            torch.zeros((self.size_layers, nhead, n_rel)))
-        self._scaler = nn.Parameter(torch.zeros(2))
-
         self.n_parse_layers = n_parser_layers
         self.weight_act = weight_act
-        self.relations = relations
         self.nlayers = nlayers
         self.nhead = nhead
         self.ntokens = ntokens
@@ -168,26 +161,11 @@ class StructFormer(nn.Module):
         init.xavier_uniform_(self.child_ff.weight)
         init.zeros_(self.child_ff.bias)
 
-        self._rel_weight.data.uniform_(0, 0.1)
-
-    def visibility(self, x, device):
+    def visibility(self, x):
         """Mask pad tokens."""
         visibility = (x != self.pad)
         visibility = visibility[:, None, :].expand(-1, x.size(1), -1)
         return visibility
-
-    @property
-    def scaler(self):
-        return self._scaler.exp()
-
-    @property
-    def rel_weight(self):
-        if self.weight_act == 'sigmoid':
-            return torch.sigmoid(self._rel_weight)
-        elif self.weight_act == 'softmax':
-            return torch.softmax(self._rel_weight, dim=-1)
-        elif self.weight_act == 'ones':
-            return torch.ones_like(self._rel_weight)
 
     def parse(self, x, pos, deps=None):
         """Parse input sentence.
@@ -239,41 +217,15 @@ class StructFormer(nn.Module):
         head = p.masked_fill(eye, 0)
         child = head.transpose(1, 2)
 
-        rel_list = []
-        if 'eye' in self.relations:
-            rel_list.append(eye.float())
-        if 'head' in self.relations:
-            rel_list.append(head)
-        if 'child' in self.relations:
-            rel_list.append(child)
-        if 'cibling' in self.relations:
-            cibling = torch.bmm(head, child).masked_fill(eye, 0)
-            rel_list.append(cibling)
-        if 'ancester' in self.relations:
-            ancester = torch.bmm(head, head).masked_fill(eye, 0)
-            rel_list.append(ancester)
-        if 'descent' in self.relations:
-            descent = torch.bmm(child, child).masked_fill(eye, 0)
-            rel_list.append(descent)
-        if 'neighbor' in self.relations:
-            left_eye = F.pad(eye[:, :, 1:], (0, 1), value=0)
-            right_eye = F.pad(eye[:, :, :-1], (1, 0), value=0)
-            rel_list.append(left_eye + right_eye)
+        att_mask = head + child
+        att_mask = att_mask[None, :, None, :, :].repeat(self.nlayers, 1, self.nhead, 1, 1)
 
-        rel = torch.stack(rel_list, dim=1)
-
-        rel_weight = self.rel_weight
-
-        dep = torch.einsum('lhr,brij->lbhij', rel_weight, rel)
-        att_mask = dep.reshape(self.size_layers, bsz,
-                               self.nhead, length, length)
-
-        return att_mask, child, head
+        return att_mask, child + head, head
 
     def encode(self, x, pos, att_mask, parser_h):
         """Structformer encoding process."""
 
-        visibility = self.visibility(x, x.device)
+        visibility = self.visibility(x)
         h = self.emb(x)
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500

@@ -147,13 +147,3 @@ if __name__ == '__main__':
     print('=' * 89)
     test(model, ptb_corpus, eval_device, prt=args.print, mode=args.mode)
     print('=' * 89)
-
-    rel_weight = model.rel_weight.detach().cpu().numpy()
-
-    names = model.relations
-
-    for i in range(rel_weight.shape[0]):
-        for j in range(rel_weight.shape[1]):
-            print(plot(rel_weight[i, j], max_val=1.), end=' ')
-            values = rel_weight[i, j]
-        print()

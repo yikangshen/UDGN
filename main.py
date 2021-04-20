@@ -166,7 +166,6 @@ model = structformer.StructFormer(
     pos_emb=args.pos_emb,
     pad=pad_token,
     n_parser_layers=args.n_parser_layers,
-    relations=args.relations.split(','),
     weight_act=args.weight_act)
 
 ###
