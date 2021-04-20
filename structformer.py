@@ -167,7 +167,7 @@ class StructFormer(nn.Module):
         visibility = visibility[:, None, :].expand(-1, x.size(1), -1)
         return visibility
 
-    def parse(self, x, pos, deps=None):
+    def parse(self, x, deps=None):
         """Parse input sentence.
 
         Args:
@@ -250,7 +250,7 @@ class StructFormer(nn.Module):
 
         batch_size, length = x.size()
 
-        p, logp, parser_h = self.parse(x, pos, deps)
+        p, logp, parser_h = self.parse(x, deps)
         att_mask, child, head = self.generate_mask(p)
 
         raw_output = self.encode(x, pos, att_mask, parser_h)
