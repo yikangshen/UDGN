@@ -89,6 +89,7 @@ class StructFormer(nn.Module):
                  pad=0,
                  n_parser_layers=3,
                  weight_act='softmax',
+                 relations=('left','right'),
                  share_params=False):
         """Initialization.
 
@@ -122,8 +123,9 @@ class StructFormer(nn.Module):
             self.size_layers = nlayers
 
         self.layers = nn.ModuleList([
-            layers.TransformerLayer(emb_size, nhead, head_size, dropout,
-                                    dropatt=dropatt)
+            layers.TransformerLayer(
+                emb_size, nhead, head_size, 
+                nrels=len(relations), dropout=dropout, dropatt=dropatt)
             for _ in range(self.size_layers)])
 
         self.norm = nn.LayerNorm(emb_size)
@@ -144,6 +146,7 @@ class StructFormer(nn.Module):
         self.ntokens = ntokens
         self.emb_size = emb_size
         self.pad = pad
+        self.relations = relations
 
         self.init_weights()
 
@@ -205,7 +208,7 @@ class StructFormer(nn.Module):
         logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
-        return p, logits, h
+        return p, logits
 
     def generate_mask(self, p):
         """Compute head and cibling distribution for each token."""
@@ -217,16 +220,32 @@ class StructFormer(nn.Module):
         head = p.masked_fill(eye, 0)
         child = head.transpose(1, 2)
 
-        mask = head + child
-
-        return mask, head
-
-    def encode(self, x, pos, att_mask, parser_h):
-        """Structformer encoding process."""
-
         # For better gradient
-        att_mask = att_mask[None, :, None, :, :].repeat(self.nlayers, 1, self.nhead, 1, 1)
+        weight = torch.ones((self.nlayers, self.nhead, 2), device=p.device)
+        att_mask = torch.einsum('lhr,brij->lbhij', weight, torch.stack([head, child], dim=1))
 
+        ones = torch.ones_like(p)
+
+        rels = []
+        if 'left' in self.relations:
+            left = ones.tril(-1)
+            rels.append(left)
+        if 'right' in self.relations:
+            right = ones.triu(1)
+            rels.append(right)
+        if 'head' in self.relations:
+            rels.append(head)
+        if 'child' in self.relations:
+            rels.append(child)
+        if len(rels) > 0:
+            rels = torch.stack(rels, dim=-1)
+        else:
+            rels = None
+
+        return att_mask, head, rels
+
+    def encode(self, x, pos, att_mask, rels):
+        """Structformer encoding process."""
         visibility = self.visibility(x)
         h = self.emb(x)
         if hasattr(self, 'pos_emb'):
@@ -235,7 +254,7 @@ class StructFormer(nn.Module):
         h = self.drop(h)
         for i in range(self.nlayers):
             h = self.layers[i % self.size_layers](
-                h, None, attn_mask=att_mask[i % self.size_layers],
+                h, rels, attn_mask=att_mask[i % self.size_layers],
                 key_padding_mask=visibility)
         return h
 
@@ -252,15 +271,16 @@ class StructFormer(nn.Module):
 
         batch_size, length = x.size()
 
-        p, logp, parser_h = self.parse(x, deps)
-        att_mask, head = self.generate_mask(p)
+        p, logp = self.parse(x, deps)
+        att_mask, head, rels = self.generate_mask(p)
 
-        raw_output = self.encode(x, pos, att_mask, parser_h)
+        raw_output = self.encode(x, pos, att_mask, rels)
         raw_output = self.norm(raw_output)
         raw_output = self.drop(raw_output)
 
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'att_mask': att_mask, 'head': head, 'root': raw_output[:, 0],
+            {'raw_output': raw_output, 'att_mask': att_mask[0, :, 0, :, :], 
+             'head': head, 'root': raw_output[:, 0],
              'loghead': logp.view(batch_size * length, -1)}

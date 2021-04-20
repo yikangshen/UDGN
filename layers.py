@@ -111,6 +111,7 @@ class MultiheadAttention(nn.Module):
                  embed_dim,
                  head_dim,
                  num_heads,
+                 nrels=0,
                  dropout=0.,
                  dropatt=0.,
                  bias=True):
@@ -141,8 +142,8 @@ class MultiheadAttention(nn.Module):
         self.vg_proj = nn.Linear(embed_dim, self.hidden_dim * 2, bias=bias)
         self.out_proj = nn.Linear(self.hidden_dim, embed_dim, bias=bias)
 
-        self.forward_bias = nn.Parameter(torch.zeros(num_heads))
-        self.backward_bias = nn.Parameter(torch.zeros(num_heads))
+        if nrels > 0:
+            self.rels_bias = nn.Parameter(torch.zeros(num_heads, nrels))
 
         self._reset_parameters()
 
@@ -161,7 +162,7 @@ class MultiheadAttention(nn.Module):
         if self.out_proj.bias is not None:
             init.constant_(self.out_proj.bias, 0.)
 
-    def forward(self, query, ctl=None, key_padding_mask=None, attn_mask=None):
+    def forward(self, query, rels=None, key_padding_mask=None, attn_mask=None):
         """Compute multi-head self-attention.
 
         Args:
@@ -175,10 +176,7 @@ class MultiheadAttention(nn.Module):
         bsz, length, embed_dim = query.size()
         assert embed_dim == self.embed_dim
 
-        if ctl is None:
-            q, k = self.qk_proj(query).chunk(2, dim=-1)
-        else:
-            q, k = self.qk_proj(ctl).chunk(2, dim=-1)
+        q, k = self.qk_proj(query).chunk(2, dim=-1)
         v, g = self.vg_proj(query).chunk(2, dim=-1)
 
         q = q.contiguous().view(bsz, length, self.num_heads,
@@ -191,8 +189,10 @@ class MultiheadAttention(nn.Module):
                                 self.head_dim).transpose(1, 2)
 
         attn_output_weights = torch.einsum('bhid,bhjd->bhij', q, k)
-        attn_output_weights = (attn_output_weights + self.backward_bias[None, :, None, None]).tril(-1) \
-            + (attn_output_weights + self.forward_bias[None, :, None, None]).triu(1)
+        if rels is not None:
+            bias = torch.einsum('bijr,hr->bhij', rels, self.rels_bias)
+            attn_output_weights = attn_output_weights + bias
+
         assert list(attn_output_weights.size()) == [
             bsz, self.num_heads, length, length]
 
@@ -234,6 +234,7 @@ class TransformerLayer(nn.Module):
                  d_model,
                  nhead,
                  d_hidden=64,
+                 nrels=0,
                  dropout=0.1,
                  dropatt=0.1):
         """Initialization.
@@ -251,7 +252,7 @@ class TransformerLayer(nn.Module):
 
         super(TransformerLayer, self).__init__()
         self.self_attn = MultiheadAttention(
-            d_model, d_hidden, nhead, dropout=dropout, dropatt=dropatt)
+            d_model, d_hidden, nhead, nrels=nrels, dropout=dropout, dropatt=dropatt)
 
         self.dropout = nn.Dropout(dropout)
         self.nhead = nhead
@@ -267,7 +268,7 @@ class TransformerLayer(nn.Module):
           src3: the output of transformer layer, share the same shape as src.
         """
         src2 = self.self_attn(
-            src, ctl=ctl, attn_mask=attn_mask,
+            src, rels=ctl, attn_mask=attn_mask,
             key_padding_mask=key_padding_mask)
 
         src2 = src + self.dropout(src2)
