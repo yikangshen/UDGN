@@ -89,7 +89,7 @@ class StructFormer(nn.Module):
                  pad=0,
                  n_parser_layers=3,
                  weight_act='softmax',
-                 relations=('left','right'),
+                 relations='none',
                  share_params=False):
         """Initialization.
 
@@ -110,6 +110,17 @@ class StructFormer(nn.Module):
 
         super(StructFormer, self).__init__()
 
+        if relations == 'none':
+            nrels = 0
+        elif relations == 'type1':
+            nrels = 2
+        elif relations == 'type2':
+            nrels = 2
+        elif relations == 'type3':
+            nrels = 4
+        else:
+            raise Exception
+
         self.drop = nn.Dropout(dropout)
 
         self.emb = nn.Embedding(ntokens, emb_size)
@@ -125,7 +136,7 @@ class StructFormer(nn.Module):
         self.layers = nn.ModuleList([
             layers.TransformerLayer(
                 emb_size, nhead, head_size, 
-                nrels=len(relations), dropout=dropout, dropatt=dropatt)
+                nrels=nrels, dropout=dropout, dropatt=dropatt)
             for _ in range(self.size_layers)])
 
         self.norm = nn.LayerNorm(emb_size)
@@ -221,26 +232,25 @@ class StructFormer(nn.Module):
         child = head.transpose(1, 2)
 
         # For better gradient
-        weight = torch.ones((self.nlayers, self.nhead, 2), device=p.device)
-        att_mask = torch.einsum('lhr,brij->lbhij', weight, torch.stack([head, child], dim=1))
+        weight = torch.ones((self.nlayers, self.nhead, 3), device=p.device)
+        att_mask = torch.einsum('lhr,brij->lbhij', weight, torch.stack([head, child, -head*child], dim=1))
 
         ones = torch.ones_like(p)
 
         rels = []
-        if 'left' in self.relations:
-            left = ones.tril(-1)
-            rels.append(left)
-        if 'right' in self.relations:
-            right = ones.triu(1)
-            rels.append(right)
-        if 'head' in self.relations:
-            rels.append(head)
-        if 'child' in self.relations:
-            rels.append(child)
-        if len(rels) > 0:
-            rels = torch.stack(rels, dim=-1)
-        else:
+        left = ones.tril(-1)
+        right = ones.triu(1)
+        if self.relations == 'none':
             rels = None
+        elif self.relations == 'type1':
+            rels = torch.stack([left, right], dim=-1)
+        elif self.relations == 'type2':
+            rels = torch.stack([head, child], dim=-1)
+        elif self.relations == 'type3':
+            rels0 = torch.stack([left, right], dim=-1)
+            rels1 = torch.stack([left, right], dim=-1)
+            rels = rels0[:, :, :, :, None] * rels1[:, :, :, None, :]
+            rels = rels.view(bsz, length, length, -1)
 
         return att_mask, head, rels
 

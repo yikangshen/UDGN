@@ -79,7 +79,7 @@ parser.add_argument('--pos_emb', action='store_true', help='use CUDA')
 parser.add_argument(
     '--weight_act', type=str, default='ones', help='use CUDA')
 parser.add_argument(
-    '--relations', type=str, default='left,right', help='relation list')
+    '--relations', type=str, default='none', help='relation types')
 parser.add_argument('--seed', type=int, default=1111, help='random seed')
 parser.add_argument('--nonmono', type=int, default=5, help='random seed')
 parser.add_argument('--cuda', action='store_true', help='use CUDA')
@@ -166,7 +166,7 @@ model = structformer.StructFormer(
     pos_emb=args.pos_emb,
     pad=pad_token,
     n_parser_layers=args.n_parser_layers,
-    relations=args.relations.split(',') if args.relations != 'none' else [],
+    relations=args.relations,
     weight_act=args.weight_act)
 
 ###
