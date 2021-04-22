@@ -135,7 +135,7 @@ class StructFormer(nn.Module):
 
         self.layers = nn.ModuleList([
             layers.TransformerLayer(
-                emb_size, nhead, head_size, 
+                emb_size, nhead, head_size,
                 nrels=nrels, dropout=dropout, dropatt=dropatt)
             for _ in range(self.size_layers)])
 
@@ -232,8 +232,9 @@ class StructFormer(nn.Module):
         child = head.transpose(1, 2)
 
         # For better gradient
-        weight = torch.ones((self.nlayers, self.nhead, 3), device=p.device)
-        att_mask = torch.einsum('lhr,brij->lbhij', weight, torch.stack([head, child, -head*child], dim=1))
+        weight = torch.ones((self.nlayers, 3, self.nhead), device=p.device)
+        att_mask = torch.einsum('lrh,brij->lbijh', weight,
+                                torch.stack([head, child, -head*child], dim=1))
 
         ones = torch.ones_like(p)
 
@@ -291,6 +292,6 @@ class StructFormer(nn.Module):
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'att_mask': att_mask[0, :, 0, :, :], 
+            {'raw_output': raw_output, 'att_mask': att_mask[0, :, :, :, 0],
              'head': head, 'root': raw_output[:, 0],
              'loghead': logp.view(batch_size * length, -1)}
