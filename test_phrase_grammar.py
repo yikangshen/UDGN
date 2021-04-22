@@ -90,9 +90,8 @@ def test(parser, corpus, device, prt=False, mode='tree'):
     print('-' * 89)
 
     dda = correct / total
-    print('Stanford Style: %.3f DDA' % (dda))
 
-    return dda
+    return float(dda)
 
 
 if __name__ == '__main__':
@@ -145,5 +144,6 @@ if __name__ == '__main__':
         eval_device = torch.device('cpu')
 
     print('=' * 89)
-    test(model, ptb_corpus, eval_device, prt=args.print, mode=args.mode)
+    uas = test(model, ptb_corpus, eval_device, prt=args.print, mode=args.mode)
+    print('Stanford Style: %.3f UAS' % (uas))
     print('=' * 89)

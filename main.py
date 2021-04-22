@@ -31,6 +31,7 @@ from orion.client import report_objective
 import data_dep
 import structformer
 from utils import batchify
+from test_phrase_grammar import test
 
 parser = argparse.ArgumentParser(
     description='PyTorch PennTreeBank RNN/LSTM Language Model')
@@ -240,7 +241,7 @@ def evaluate_parser(data_source, heads_source):
         total_corr += (pred == heads).float().sum().data
         total_words += (heads > -1).float().sum().data
 
-    return total_corr / total_words
+    return float(total_corr / total_words)
 
 
 def train():
@@ -337,11 +338,12 @@ model_load(args.save)
 
 # Run on test data.
 test_loss, test_masked_acc = evaluate(test_data, test_heads)
-parser_test_acc = evaluate_parser(parser_test_data, parser_test_heads)
+argmax_acc = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
+tree_acc = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
-      'masked UAS {:5.3f} | test UAS {:8.3f}'.format(test_loss, math.exp(test_loss),
-                                                     test_masked_acc, parser_test_acc))
+      'masked UAS {:5.3f} | test UAS {:8.3f} / {:4.3f}'.format(test_loss, math.exp(test_loss),
+                                                     test_masked_acc, argmax_acc, tree_acc))
 print('=' * 89)
 
-report_objective(parser_test_acc, name='UAS')
+report_objective(tree_acc, name='UAS')
