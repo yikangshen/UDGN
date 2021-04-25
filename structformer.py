@@ -84,12 +84,12 @@ class StructFormer(nn.Module):
                  ntokens,
                  nhead=8,
                  dropout=0.1,
-                 dropatt=0.1,
+                 dropatt=0,
                  pos_emb=False,
                  pad=0,
-                 n_parser_layers=4,
-                 relations=('head', 'child'),
+                 n_parser_layers=3,
                  weight_act='softmax',
+                 relations='none',
                  share_params=False):
         """Initialization.
 
@@ -110,6 +110,17 @@ class StructFormer(nn.Module):
 
         super(StructFormer, self).__init__()
 
+        if relations == 'none':
+            nrels = 0
+        elif relations == 'type1':
+            nrels = 2
+        elif relations == 'type2':
+            nrels = 2
+        elif relations == 'type3':
+            nrels = 4
+        else:
+            raise Exception
+
         self.drop = nn.Dropout(dropout)
 
         self.emb = nn.Embedding(ntokens, emb_size)
@@ -123,8 +134,9 @@ class StructFormer(nn.Module):
             self.size_layers = nlayers
 
         self.layers = nn.ModuleList([
-            layers.TransformerLayer(emb_size, nhead, head_size, dropout,
-                                    dropatt=dropatt)
+            layers.TransformerLayer(
+                emb_size, nhead, head_size,
+                nrels=nrels, dropout=dropout, dropatt=dropatt)
             for _ in range(self.size_layers)])
 
         self.norm = nn.LayerNorm(emb_size)
@@ -132,25 +144,19 @@ class StructFormer(nn.Module):
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
 
-        self.parser_layers = nn.LSTM(emb_size, emb_size // 2, n_parser_layers,
+        self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
 
-        self.parent_ff = nn.Linear(emb_size, emb_size)
-        self.child_ff = nn.Linear(emb_size, emb_size)
-
-        n_rel = len(relations)
-        self._rel_weight = nn.Parameter(
-            torch.zeros((self.size_layers, nhead, n_rel)))
-        self._scaler = nn.Parameter(torch.zeros(2))
+        self.parser_ff = nn.Linear(emb_size * 2, emb_size * 2)
 
         self.n_parse_layers = n_parser_layers
         self.weight_act = weight_act
-        self.relations = relations
         self.nlayers = nlayers
         self.nhead = nhead
         self.ntokens = ntokens
         self.emb_size = emb_size
         self.pad = pad
+        self.relations = relations
 
         self.init_weights()
 
@@ -163,33 +169,16 @@ class StructFormer(nn.Module):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
         self.output_layer.bias.data.fill_(0)
 
-        init.xavier_uniform_(self.parent_ff.weight)
-        init.zeros_(self.parent_ff.bias)
-        init.xavier_uniform_(self.child_ff.weight)
-        init.zeros_(self.child_ff.bias)
+        init.xavier_uniform_(self.parser_ff.weight)
+        init.zeros_(self.parser_ff.bias)
 
-        self._rel_weight.data.uniform_(0, 0.1)
-
-    def visibility(self, x, device):
+    def visibility(self, x):
         """Mask pad tokens."""
         visibility = (x != self.pad)
         visibility = visibility[:, None, :].expand(-1, x.size(1), -1)
         return visibility
 
-    @property
-    def scaler(self):
-        return self._scaler.exp()
-
-    @property
-    def rel_weight(self):
-        if self.weight_act == 'sigmoid':
-            return torch.sigmoid(self._rel_weight)
-        elif self.weight_act == 'softmax':
-            return torch.softmax(self._rel_weight, dim=-1)
-        elif self.weight_act == 'ones':
-            return torch.ones_like(self._rel_weight)
-
-    def parse(self, x, pos, deps=None):
+    def parse(self, x, deps=None):
         """Parse input sentence.
 
         Args:
@@ -205,14 +194,14 @@ class StructFormer(nn.Module):
         visibility = mask[:, None, :].expand(-1, x.size(1), -1)
 
         h = self.parser_emb(x)
+        h = self.drop(h)
         h = pack_padded_sequence(
             h, lengths, batch_first=True, enforce_sorted=False)
         h, _ = self.parser_layers(h)
         h, _ = pad_packed_sequence(h, batch_first=True)
 
         h = self.drop(h)
-        parent = self.parent_ff(h)
-        child = self.child_ff(h)
+        parent, child = self.parser_ff(h).chunk(2, dim=-1)
 
         if deps is not None:
             bsz, length = x.size()
@@ -221,11 +210,12 @@ class StructFormer(nn.Module):
             p.scatter_(2, deps[:, :, None], 1)
             return p, torch.zeros_like(p), h
 
-        logits = torch.bmm(child, parent.transpose(1, 2))
+        scaling = self.emb_size ** -0.5
+        logits = torch.bmm(child, parent.transpose(1, 2)) * scaling
         logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
-        return p, logits, h
+        return p, logits
 
     def generate_mask(self, p):
         """Compute head and cibling distribution for each token."""
@@ -237,41 +227,32 @@ class StructFormer(nn.Module):
         head = p.masked_fill(eye, 0)
         child = head.transpose(1, 2)
 
-        rel_list = []
-        if 'eye' in self.relations:
-            rel_list.append(eye.float())
-        if 'head' in self.relations:
-            rel_list.append(head)
-        if 'child' in self.relations:
-            rel_list.append(child)
-        if 'cibling' in self.relations:
-            cibling = torch.bmm(head, child).masked_fill(eye, 0)
-            rel_list.append(cibling)
-        if 'ancester' in self.relations:
-            ancester = torch.bmm(head, head).masked_fill(eye, 0)
-            rel_list.append(ancester)
-        if 'descent' in self.relations:
-            descent = torch.bmm(child, child).masked_fill(eye, 0)
-            rel_list.append(descent)
-        if 'neighbor' in self.relations:
-            left_eye = F.pad(eye[:, :, 1:], (0, 1), value=0)
-            right_eye = F.pad(eye[:, :, :-1], (1, 0), value=0)
-            rel_list.append(left_eye + right_eye)
+        # For better gradient
+        att_mask = head + child - head * child
+        
+        ones = torch.ones_like(p)
 
-        rel = torch.stack(rel_list, dim=1)
+        rels = []
+        left = ones.tril(-1)
+        right = ones.triu(1)
+        if self.relations == 'none':
+            rels = None
+        elif self.relations == 'type1':
+            rels = torch.stack([left, right], dim=-1)
+        elif self.relations == 'type2':
+            rels = torch.stack([head, child], dim=-1)
+        elif self.relations == 'type3':
+            rels0 = torch.stack([left, right], dim=-1)
+            rels1 = torch.stack([left, right], dim=-1)
+            rels = rels0[:, :, :, :, None] * rels1[:, :, :, None, :]
+            rels = rels.view(bsz, length, length, -1)
 
-        rel_weight = self.rel_weight
+        return att_mask, head, rels
 
-        dep = torch.einsum('lhr,brij->lbhij', rel_weight, rel)
-        att_mask = dep.reshape(self.size_layers, bsz,
-                               self.nhead, length, length)
-
-        return att_mask, child, head
-
-    def encode(self, x, pos, att_mask, parser_h):
+    def encode(self, x, pos, att_mask, rels):
         """Structformer encoding process."""
-
-        visibility = self.visibility(x, x.device)
+        att_mask = att_mask[None, :, :, :, None].repeat(self.nlayers, 1, 1, 1, self.nhead)
+        visibility = self.visibility(x)
         h = self.emb(x)
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500
@@ -279,7 +260,7 @@ class StructFormer(nn.Module):
         h = self.drop(h)
         for i in range(self.nlayers):
             h = self.layers[i % self.size_layers](
-                h, None, attn_mask=att_mask[i % self.size_layers],
+                h, rels, attn_mask=att_mask[i % self.size_layers],
                 key_padding_mask=visibility)
         return h
 
@@ -296,15 +277,16 @@ class StructFormer(nn.Module):
 
         batch_size, length = x.size()
 
-        p, logp, parser_h = self.parse(x, pos, deps)
-        att_mask, child, head = self.generate_mask(p)
+        p, logp = self.parse(x, deps)
+        att_mask, head, rels = self.generate_mask(p)
 
-        raw_output = self.encode(x, pos, att_mask, parser_h)
+        raw_output = self.encode(x, pos, att_mask, rels)
         raw_output = self.norm(raw_output)
         raw_output = self.drop(raw_output)
 
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'child': child, 'head': head, 'root': raw_output[:, 0],
+            {'raw_output': raw_output, 'att_mask': att_mask,
+             'head': head, 'root': raw_output[:, 0],
              'loghead': logp.view(batch_size * length, -1)}

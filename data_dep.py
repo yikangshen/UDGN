@@ -141,7 +141,7 @@ class Corpus(object):
                 parser_test_file_ids.append(file_id)
 
         self.train, self.train_heads, self.train_labels \
-            = self.tokenize(train_file_ids, build_dict, build_label)
+            = self.tokenize(train_file_ids, build_dict, build_label, thd)
         self.valid, self.valid_heads, self.valid_labels \
             = self.tokenize(valid_file_ids)
         self.test, self.test_heads, self.test_labels \

@@ -111,6 +111,7 @@ class MultiheadAttention(nn.Module):
                  embed_dim,
                  head_dim,
                  num_heads,
+                 nrels=0,
                  dropout=0.,
                  dropatt=0.,
                  bias=True):
@@ -137,28 +138,26 @@ class MultiheadAttention(nn.Module):
         self.head_dim = head_dim
         self.value_dim = head_dim
 
-        self.qk_proj = nn.Linear(embed_dim, self.hidden_dim * 2, bias=bias)
-        self.vg_proj = nn.Linear(embed_dim, self.hidden_dim * 2, bias=bias)
+        self.proj = nn.Linear(embed_dim, self.hidden_dim * 4, bias=bias)
         self.out_proj = nn.Linear(self.hidden_dim, embed_dim, bias=bias)
+
+        if nrels > 0:
+            self.rels_bias = nn.Parameter(torch.zeros(num_heads, nrels))
 
         self._reset_parameters()
 
     def _reset_parameters(self):
         """Initialize attention parameters."""
 
-        init.xavier_uniform_(self.qk_proj.weight)
-        if self.qk_proj.bias is not None:
-            init.constant_(self.qk_proj.bias, 0.)
-
-        init.xavier_uniform_(self.vg_proj.weight)
-        if self.vg_proj.bias is not None:
-            init.constant_(self.vg_proj.bias, 0.)
+        init.xavier_uniform_(self.proj.weight)
+        if self.proj.bias is not None:
+            init.constant_(self.proj.bias, 0.)
 
         init.xavier_uniform_(self.out_proj.weight)
         if self.out_proj.bias is not None:
             init.constant_(self.out_proj.bias, 0.)
 
-    def forward(self, query, ctl=None, key_padding_mask=None, attn_mask=None):
+    def forward(self, query, rels=None, key_padding_mask=None, attn_mask=None):
         """Compute multi-head self-attention.
 
         Args:
@@ -172,50 +171,37 @@ class MultiheadAttention(nn.Module):
         bsz, length, embed_dim = query.size()
         assert embed_dim == self.embed_dim
 
-        if ctl is None:
-            q, k = self.qk_proj(query).chunk(2, dim=-1)
-        else:
-            q, k = self.qk_proj(ctl).chunk(2, dim=-1)
-        v, g = self.vg_proj(query).chunk(2, dim=-1)
+        q, k, v, g = self.proj(query).chunk(4, dim=-1)
 
-        q = q.contiguous().view(bsz, length, self.num_heads,
-                                self.head_dim).transpose(1, 2)
-        k = k.contiguous().view(bsz, length, self.num_heads,
-                                self.head_dim).transpose(1, 2)
-        v = v.contiguous().view(bsz, length, self.num_heads,
-                                self.head_dim).transpose(1, 2)
-        g = g.contiguous().view(bsz, length, self.num_heads,
-                                self.head_dim).transpose(1, 2)
+        q = q.reshape(bsz, length, self.num_heads, self.head_dim)
+        k = k.reshape(bsz, length, self.num_heads, self.head_dim)
+        v = v.reshape(bsz, length, self.num_heads, self.head_dim)
+        g = g.reshape(bsz, length, self.num_heads, self.head_dim)
 
-        attn_output_weights = torch.einsum('bhid,bhjd->bhij', q, self.drop(k))
+        attn_output_weights = torch.einsum('bihd,bjhd->bijh', q, k)
+        if rels is not None:
+            bias = torch.einsum('bijr,hr->bijh', rels, self.rels_bias)
+            attn_output_weights = attn_output_weights + bias
+
         assert list(attn_output_weights.size()) == [
-            bsz, self.num_heads, length, length]
+            bsz, length, length, self.num_heads]
+        assert list(attn_mask.size()) == [
+            bsz, length, length, self.num_heads]
 
-        if attn_mask is None:
-            if key_padding_mask is not None:
-                attn_output_weights.masked_fill_(
-                    ~key_padding_mask[:, None, :, :], -math.inf)
-            scaling = self.head_dim ** -0.5
-            attn_output_weights = torch.softmax(
-                attn_output_weights * scaling, dim=2)
-        else:
-            assert list(attn_mask.size()) == [
-                bsz, self.num_heads, length, length]
-            scaling = self.head_dim ** -0.5
-            attn_output_weights = attn_output_weights * scaling
-            attn_output_weights = torch.softmax(
-                attn_output_weights, dim=1) * attn_mask
-            if key_padding_mask is not None:
-                attn_output_weights.masked_fill_(
-                    ~key_padding_mask[:, None, :, :], 0)
+        scaling = self.head_dim ** -0.5
+        attn_output_weights = attn_output_weights * scaling
+        attn_output_weights = torch.softmax(
+            attn_output_weights, dim=-1) * attn_mask
+        if key_padding_mask is not None:
+            attn_output_weights.masked_fill_(
+                ~key_padding_mask[:, :, :, None], 0)
 
         attn_output_weights = self.dropatt(attn_output_weights)
 
         attn_output = torch.einsum(
-            'bhij,bhjd->bhid', attn_output_weights, F.elu(v))
+            'bijh,bjhd->bihd', attn_output_weights, torch.tanh(v))
         gated_output = attn_output * torch.sigmoid(g)
-        gated_output = gated_output.transpose(1, 2).contiguous().view(
-            bsz, length, self.hidden_dim)
+        gated_output = gated_output.reshape(bsz, length, self.hidden_dim)
 
         output = self.out_proj(self.drop(gated_output))
 
@@ -229,6 +215,7 @@ class TransformerLayer(nn.Module):
                  d_model,
                  nhead,
                  d_hidden=64,
+                 nrels=0,
                  dropout=0.1,
                  dropatt=0.1):
         """Initialization.
@@ -246,7 +233,7 @@ class TransformerLayer(nn.Module):
 
         super(TransformerLayer, self).__init__()
         self.self_attn = MultiheadAttention(
-            d_model, d_hidden, nhead, dropout=dropout, dropatt=dropatt)
+            d_model, d_hidden, nhead, nrels=nrels, dropout=dropout, dropatt=dropatt)
 
         self.dropout = nn.Dropout(dropout)
         self.nhead = nhead
@@ -262,7 +249,7 @@ class TransformerLayer(nn.Module):
           src3: the output of transformer layer, share the same shape as src.
         """
         src2 = self.self_attn(
-            src, ctl=ctl, attn_mask=attn_mask,
+            src, rels=ctl, attn_mask=attn_mask,
             key_padding_mask=key_padding_mask)
 
         src2 = src + self.dropout(src2)

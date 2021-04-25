@@ -31,6 +31,7 @@ from orion.client import report_objective
 import data_dep
 import structformer
 from utils import batchify
+from test_phrase_grammar import test
 
 parser = argparse.ArgumentParser(
     description='PyTorch PennTreeBank RNN/LSTM Language Model')
@@ -47,10 +48,10 @@ parser.add_argument(
     '--nhid', type=int, default=128, help='number of hidden units per layer')
 parser.add_argument('--nlayers', type=int, default=8, help='number of layers')
 parser.add_argument(
-    '--n_parser_layers', type=int, default=2, help='number of layers')
+    '--n_parser_layers', type=int, default=3, help='number of layers')
 parser.add_argument('--nheads', type=int, default=8, help='number of layers')
 parser.add_argument(
-    '--lr', type=float, default=0.0003, help='initial learning rate')
+    '--lr', type=float, default=0.001, help='initial learning rate')
 parser.add_argument(
     '--parser_loss', type=float, default=0, help='Parser loss weight')
 parser.add_argument('--ground_truth', action='store_true', help='use CUDA')
@@ -63,7 +64,7 @@ parser.add_argument(
 parser.add_argument(
     '--dropout',
     type=float,
-    default=0.1,
+    default=0.2,
     help='dropout for rnn layers (0 = no dropout)')
 parser.add_argument(
     '--dropatt',
@@ -79,7 +80,7 @@ parser.add_argument('--pos_emb', action='store_true', help='use CUDA')
 parser.add_argument(
     '--weight_act', type=str, default='ones', help='use CUDA')
 parser.add_argument(
-    '--relations', type=str, default='head,child', help='relation list')
+    '--relations', type=str, default='none', help='relation types')
 parser.add_argument('--seed', type=int, default=1111, help='random seed')
 parser.add_argument('--nonmono', type=int, default=5, help='random seed')
 parser.add_argument('--cuda', action='store_true', help='use CUDA')
@@ -166,7 +167,7 @@ model = structformer.StructFormer(
     pos_emb=args.pos_emb,
     pad=pad_token,
     n_parser_layers=args.n_parser_layers,
-    relations=args.relations.split(','),
+    relations=args.relations,
     weight_act=args.weight_act)
 
 ###
@@ -240,7 +241,7 @@ def evaluate_parser(data_source, heads_source):
         total_corr += (pred == heads).float().sum().data
         total_words += (heads > -1).float().sum().data
 
-    return total_corr / total_words
+    return float(total_corr / total_words)
 
 
 def train():
@@ -337,9 +338,12 @@ model_load(args.save)
 
 # Run on test data.
 test_loss, test_masked_acc = evaluate(test_data, test_heads)
-parser_test_acc = evaluate_parser(parser_test_data, parser_test_heads)
+argmax_acc = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
+tree_acc = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
-      'masked UAS {:5.3f} | test UAS {:8.3f}'.format(test_loss, math.exp(test_loss),
-                                                     test_masked_acc, parser_test_acc))
+      'masked UAS {:5.3f} | test UAS {:8.3f} / {:4.3f}'.format(test_loss, math.exp(test_loss),
+                                                     test_masked_acc, argmax_acc, tree_acc))
 print('=' * 89)
+
+report_objective(tree_acc, name='UAS')
