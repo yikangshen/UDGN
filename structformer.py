@@ -147,8 +147,7 @@ class StructFormer(nn.Module):
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
 
-        self.parent_ff = nn.Linear(emb_size * 2, emb_size)
-        self.child_ff = nn.Linear(emb_size * 2, emb_size)
+        self.parser_ff = nn.Linear(emb_size * 2, emb_size * 2)
 
         self.n_parse_layers = n_parser_layers
         self.weight_act = weight_act
@@ -170,10 +169,8 @@ class StructFormer(nn.Module):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
         self.output_layer.bias.data.fill_(0)
 
-        init.xavier_uniform_(self.parent_ff.weight)
-        init.zeros_(self.parent_ff.bias)
-        init.xavier_uniform_(self.child_ff.weight)
-        init.zeros_(self.child_ff.bias)
+        init.xavier_uniform_(self.parser_ff.weight)
+        init.zeros_(self.parser_ff.bias)
 
     def visibility(self, x):
         """Mask pad tokens."""
@@ -204,8 +201,7 @@ class StructFormer(nn.Module):
         h, _ = pad_packed_sequence(h, batch_first=True)
 
         h = self.drop(h)
-        parent = self.parent_ff(h)
-        child = self.child_ff(h)
+        parent, child = self.parser_ff(h).chunk(2, dim=-1)
 
         if deps is not None:
             bsz, length = x.size()
@@ -232,10 +228,8 @@ class StructFormer(nn.Module):
         child = head.transpose(1, 2)
 
         # For better gradient
-        weight = torch.ones((self.nlayers, 3, self.nhead), device=p.device)
-        att_mask = torch.einsum('lrh,brij->lbijh', weight,
-                                torch.stack([head, child, -head*child], dim=1))
-
+        att_mask = head + child - head * child
+        
         ones = torch.ones_like(p)
 
         rels = []
@@ -257,6 +251,7 @@ class StructFormer(nn.Module):
 
     def encode(self, x, pos, att_mask, rels):
         """Structformer encoding process."""
+        att_mask = att_mask[None, :, :, :, None].repeat(self.nlayers, 1, 1, 1, self.nhead)
         visibility = self.visibility(x)
         h = self.emb(x)
         if hasattr(self, 'pos_emb'):
@@ -292,6 +287,6 @@ class StructFormer(nn.Module):
         output = self.output_layer(raw_output)
 
         return output.view(batch_size * length, -1), \
-            {'raw_output': raw_output, 'att_mask': att_mask[0, :, :, :, 0],
+            {'raw_output': raw_output, 'att_mask': att_mask,
              'head': head, 'root': raw_output[:, 0],
              'loghead': logp.view(batch_size * length, -1)}
