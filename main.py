@@ -210,9 +210,10 @@ def evaluate(data_source, heads_source):
         data, targets = mask_data(data)
         pos = torch.arange(data.size(1), device=device)[None, :]
 
-        output, p_dict = model(data, pos, heads if args.ground_truth else None)
+        loss, p_dict = model(data, pos, heads if args.ground_truth else None,
+                               targets=targets)
 
-        loss = criterion(output, targets.reshape(-1))
+        # loss = criterion(output, targets.reshape(-1))
         count = (targets != pad_token).float().sum().data
         total_loss += loss.data * count
         total_count += count
@@ -262,8 +263,9 @@ def train():
 
         optimizer.zero_grad()
 
-        output, p_dict = model(data, pos, heads if args.ground_truth else None)
-        loss = criterion(output, targets.reshape(-1))
+        loss, p_dict = model(data, pos, heads if args.ground_truth else None,
+                             targets=targets)
+        # loss = criterion(output, targets.reshape(-1))
         logp_head = p_dict['loghead']
         parser_loss = head_criterion(logp_head, heads.reshape(-1))
         (loss + args.parser_loss * parser_loss).backward()

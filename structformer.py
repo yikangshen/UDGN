@@ -141,8 +141,13 @@ class StructFormer(nn.Module):
 
         self.norm = nn.LayerNorm(emb_size)
 
-        self.output_layer = nn.Linear(emb_size, ntokens)
-        self.output_layer.weight = self.emb.weight
+        # self.output_layer = nn.Linear(emb_size, ntokens)
+        # self.output_layer.weight = self.emb.weight
+        self.output_als = nn.AdaptiveLogSoftmaxWithLoss(
+                in_features=emb_size,
+                n_classes=ntokens,
+                cutoffs=[100, 1000, 10000],
+        )
 
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
@@ -167,7 +172,7 @@ class StructFormer(nn.Module):
         self.parser_emb.weight.data.uniform_(-initrange, initrange)
         if hasattr(self, 'pos_emb'):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
-        self.output_layer.bias.data.fill_(0)
+        # self.output_layer.bias.data.fill_(0)
 
         init.xavier_uniform_(self.parser_ff.weight)
         init.zeros_(self.parser_ff.bias)
@@ -264,7 +269,7 @@ class StructFormer(nn.Module):
                 key_padding_mask=visibility)
         return h
 
-    def forward(self, x, pos, deps=None):
+    def forward(self, x, pos, deps=None, targets=None):
         """Pass the input through the encoder layer.
 
         Args:
@@ -284,9 +289,29 @@ class StructFormer(nn.Module):
         raw_output = self.norm(raw_output)
         raw_output = self.drop(raw_output)
 
-        output = self.output_layer(raw_output)
+        # output = self.output_layer(raw_output)
+        target_mask = targets != self.pad
+        # flat_output = raw_output.flatten(0, 1)
+        _, loss = self.output_als(raw_output[target_mask],
+                                  targets[target_mask])
 
-        return output.view(batch_size * length, -1), \
+        return loss, \
             {'raw_output': raw_output, 'att_mask': att_mask,
              'head': head, 'root': raw_output[:, 0],
              'loghead': logp.view(batch_size * length, -1)}
+
+if __name__ == "__main__":
+    sf = StructFormer(
+        head_size=80,
+        emb_size=80,
+        nlayers=7,
+        ntokens=2000,
+        weight_act='sigmoid'
+    )
+    data = torch.randint(1, 100, size=(2, 5))
+    data[-1, -1] = 0
+    print(data)
+    pos = torch.arange(data.size(1))[None, :]
+    sf(data, pos, targets=data)[0].sum().backward()
+    print(sf(data, pos)[0].sum())
+
