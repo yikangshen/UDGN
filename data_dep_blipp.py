@@ -126,17 +126,30 @@ class Corpus(object):
             self.labels = Dictionary()
             build_label = True
 
+
+        path_1987 = path + '/1987/W7_%03d'
+        path_1988 = path + '/1988/W8_%03d'
+        path_1989 = path + '/1989/W9_%03d'
+        train_file_paths = [path_1987 % id for id in range(3, 128)] + \
+                           [path_1988 % id for id in range(3, 109)] + \
+                           [path_1989 % id for id in range(12, 42)]
         train_file_ids = []
+        for file_path in train_file_paths:
+            train_file_ids.extend(glob.glob(file_path + '/*.dep'))
+
+        valid_file_ids = []
+        for file_path in [path + '/1987/W7_001', \
+                          path + '/1988/W8_001',
+                          path + '/1989/W9_010']:
+            valid_file_ids.extend(glob.glob(file_path + '/*.dep'))
+
         test_file_ids = []
-        for file_id in glob.glob(path + "/LDC2000T43/*/*/*.dep"):
-            if "1989" in file_id:
-                test_file_ids.append(file_id)
-            else:
-                train_file_ids.append(file_id)
-        train_split = int((1 - 0.05) * len(train_file_ids))
-        train_file_ids, valid_file_ids = train_file_ids[:train_split], train_file_ids[train_split:]
-        test_split = int((1 - 0.05) * len(test_file_ids))
-        test_file_ids, parser_test_file_ids = test_file_ids[:test_split], test_file_ids[test_split:]
+        for file_path in [path + '/1987/W7_002',
+                          path + '/1988/W8_002',
+                          path + '/1989/W9_011']:
+            test_file_ids.extend(glob.glob(file_path + '/*.dep'))
+
+        parser_test_file_ids = test_file_ids
         print("train_file_ids", len(train_file_ids))
         print("valid_file_ids", len(valid_file_ids))
         print("test_file_ids", len(test_file_ids))
@@ -237,4 +250,4 @@ class Corpus(object):
 
 
 if __name__ == "__main__":
-    corpus = Corpus("data/", thd=5)
+    corpus = Corpus("data/LDC2000T43", thd=5)

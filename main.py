@@ -28,7 +28,7 @@ import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
 from orion.client import report_objective
 
-import data_dep
+import data_dep_blipp as data_dep
 import structformer
 from utils import batchify
 from test_phrase_grammar import test
@@ -38,7 +38,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--data',
     type=str,
-    default='data/deps/',
+    default='data/LDC2000T43/',
     help='location of the data corpus')
 parser.add_argument('--dict_thd', type=int, default=5,
                     help='upper epoch limit')
