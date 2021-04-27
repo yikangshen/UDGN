@@ -147,8 +147,7 @@ class StructFormer(nn.Module):
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
 
-        self.parent_ff = nn.Linear(emb_size * 2, emb_size)
-        self.child_ff = nn.Linear(emb_size * 2, emb_size)
+        self.parser_ff = nn.Linear(emb_size * 2, emb_size * 2)
 
         self.n_parse_layers = n_parser_layers
         self.weight_act = weight_act
@@ -170,10 +169,8 @@ class StructFormer(nn.Module):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
         self.output_layer.bias.data.fill_(0)
 
-        init.xavier_uniform_(self.parent_ff.weight)
-        init.zeros_(self.parent_ff.bias)
-        init.xavier_uniform_(self.child_ff.weight)
-        init.zeros_(self.child_ff.bias)
+        init.xavier_uniform_(self.parser_ff.weight)
+        init.zeros_(self.parser_ff.bias)
 
     def visibility(self, x):
         """Mask pad tokens."""
@@ -204,8 +201,7 @@ class StructFormer(nn.Module):
         h, _ = pad_packed_sequence(h, batch_first=True)
 
         h = self.drop(h)
-        parent = self.parent_ff(h)
-        child = self.child_ff(h)
+        parent, child = self.parser_ff(h).chunk(2, dim=-1)
 
         if deps is not None:
             bsz, length = x.size()
@@ -249,7 +245,7 @@ class StructFormer(nn.Module):
             rels = torch.stack([head, child], dim=-1)
         elif self.relations == 'type3':
             rels0 = torch.stack([left, right], dim=-1)
-            rels1 = torch.stack([left, right], dim=-1)
+            rels1 = torch.stack([head, child], dim=-1)
             rels = rels0[:, :, :, :, None] * rels1[:, :, :, None, :]
             rels = rels.view(bsz, length, length, -1)
 
