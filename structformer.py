@@ -158,6 +158,9 @@ class StructFormer(nn.Module):
         self.pad = pad
         self.relations = relations
 
+
+        self.criterion = nn.CrossEntropyLoss()
+
         self.init_weights()
 
     def init_weights(self):
@@ -257,14 +260,14 @@ class StructFormer(nn.Module):
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
-        h = self.drop(h)
         for i in range(self.nlayers):
+            h = self.drop(h)
             h = self.layers[i % self.size_layers](
                 h, rels, attn_mask=att_mask[i % self.size_layers],
                 key_padding_mask=visibility)
         return h
 
-    def forward(self, x, pos, deps=None):
+    def forward(self, x, y, pos, deps=None):
         """Pass the input through the encoder layer.
 
         Args:
@@ -284,9 +287,11 @@ class StructFormer(nn.Module):
         raw_output = self.norm(raw_output)
         raw_output = self.drop(raw_output)
 
-        output = self.output_layer(raw_output)
+        target_mask = y != self.pad
+        output = self.output_layer(raw_output[target_mask])
+        loss = self.criterion(output, y[target_mask])
 
-        return output.view(batch_size * length, -1), \
+        return loss, \
             {'raw_output': raw_output, 'att_mask': att_mask,
              'head': head, 'root': raw_output[:, 0],
              'loghead': logp.view(batch_size * length, -1)}
