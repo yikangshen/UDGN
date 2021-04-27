@@ -109,11 +109,13 @@ class Corpus(object):
             os.mkdir(path)
 
         dict_file_name = os.path.join(path, 'dict.pkl')
+        print(dict_file_name)
         if os.path.exists(dict_file_name):
             print('Loading dictionary...')
             self.dictionary = pickle.load(open(dict_file_name, 'rb'))
             build_dict = False
         else:
+            print("Building dictionary...")
             self.dictionary = Dictionary()
             build_dict = True
 
