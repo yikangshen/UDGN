@@ -28,7 +28,7 @@ WORD_TAGS = [
     'CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD', 'NN',
     'NNS', 'NNP', 'NNPS', 'PDT', 'POS', 'PRP', 'PRP$', 'RB', 'RBR', 'RBS', 'RP',
     'SYM', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'WDT', 'WP',
-    'WP$', 'WRB'
+    'WP$', 'WRB', 'AUX', 'AUXG'
 ]
 CURRENCY_TAGS_WORDS = ['#', '$', 'C$', 'A$']
 ELLIPSIS = [
@@ -109,7 +109,6 @@ class Corpus(object):
             os.mkdir(path)
 
         dict_file_name = os.path.join(path, 'dict.pkl')
-        print(dict_file_name)
         if os.path.exists(dict_file_name):
             print('Loading dictionary...')
             self.dictionary = pickle.load(open(dict_file_name, 'rb'))
@@ -182,7 +181,7 @@ class Corpus(object):
 
     def tokenize(self, file_ids, build_dict=False, build_label=False, thd=5):
         """Tokenizes a text file."""
-
+        import string
         sens = []
         heads = []
         labels = []
@@ -197,8 +196,13 @@ class Corpus(object):
                     sen_head = []
                     sen_label = []
                     address_mapping = []
+
+                    debug_print = []
+                    fishy = False
+
                     for address in range(1, len(g.nodes)):
                         node = g.nodes[address]
+                        debug_print.append(node['word'])
                         if node['tag'] in WORD_TAGS:
                             w = node['word']
                             w = w.lower()
@@ -215,11 +219,19 @@ class Corpus(object):
                             sen_label.append(node['rel'])
                             address_mapping.append(len(sen) - 1)
                         else:
+                            fishy = any(c in string.ascii_lowercase
+                                        for c in node['word'].lower())
+                            debug_print.append("[NW "+node['tag']+"]")
                             address_mapping.append(-1)
+                        debug_print.append(' ')
 
                     sen_head = [address_mapping[ad] for ad in sen_head]
 
                     if len(sen) > 0:
+                        if fishy:
+                            raise Warning("\nOriginal sentence:" +
+                                    ''.join(debug_print) + "\nProcessed: " +
+                                    ''.join(sen) + "\n")
                         sens.append(sen)
                         heads.append(sen_head)
                         labels.append(sen_label)

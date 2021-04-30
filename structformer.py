@@ -141,8 +141,8 @@ class StructFormer(nn.Module):
 
         self.norm = nn.LayerNorm(emb_size)
 
-        # self.output_layer = nn.Linear(emb_size, ntokens)
-        # self.output_layer.weight = self.emb.weight
+        self.output_layer = nn.Linear(emb_size, ntokens)
+        self.output_layer.weight = self.emb.weight
         self.output_als = nn.AdaptiveLogSoftmaxWithLoss(
                 in_features=emb_size,
                 n_classes=ntokens,
@@ -265,8 +265,8 @@ class StructFormer(nn.Module):
         if hasattr(self, 'pos_emb'):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
+        h = self.drop(h)
         for i in range(self.nlayers):
-            h = self.drop(h)
             h = self.layers[i % self.size_layers](
                 h, rels, attn_mask=att_mask[i % self.size_layers],
                 key_padding_mask=visibility)

@@ -21,6 +21,7 @@ import argparse
 import numpy
 import torch
 
+# import data_dep_blipp as data_dep
 import data_dep
 import edmonds
 from hinton import plot
@@ -59,7 +60,7 @@ def test(parser, corpus, device, prt=False, mode='tree'):
         data = torch.LongTensor([x]).to(device)
         pos = torch.LongTensor([list(range(len(x)))]).to(device)
 
-        _, p_dict = parser(data, pos)
+        _, p_dict = parser(data, data, pos)
         mask = p_dict['att_mask']
         head = p_dict['head']
 
@@ -71,7 +72,7 @@ def test(parser, corpus, device, prt=False, mode='tree'):
             pred = edmonds.single_root_msa(numpy.log(head))
         else:
             raise Exception
-        
+
         correct += (pred == deps).sum()
         total += len(sen)
 
@@ -105,7 +106,7 @@ if __name__ == '__main__':
     argpr.add_argument(
         '--data',
         type=str,
-        default='data/deps/',
+        default='data/LDC2000T43/',
         help='location of the data corpus')
     argpr.add_argument(
         '--checkpoint',
