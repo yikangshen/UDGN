@@ -179,6 +179,8 @@ class MultiheadAttention(nn.Module):
         g = g.reshape(bsz, length, self.num_heads, self.head_dim)
 
         attn_output_weights = torch.einsum('bihd,bjhd->bijh', q, k)
+        scaling = self.head_dim ** -0.5
+        attn_output_weights = attn_output_weights * scaling
         if rels is not None:
             bias = torch.einsum('bijr,hr->bijh', rels, self.rels_bias)
             attn_output_weights = attn_output_weights + bias
@@ -188,8 +190,6 @@ class MultiheadAttention(nn.Module):
         assert list(attn_mask.size()) == [
             bsz, length, length, self.num_heads]
 
-        scaling = self.head_dim ** -0.5
-        attn_output_weights = attn_output_weights * scaling
         attn_output_weights = torch.softmax(
             attn_output_weights, dim=-1) * attn_mask
         if key_padding_mask is not None:
