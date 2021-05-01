@@ -247,6 +247,7 @@ class StructFormer(nn.Module):
 
         if self.detach_parser:
             att_mask = att_mask.detach()
+            rels = rels.detach()
 
         return att_mask, head, rels
 
