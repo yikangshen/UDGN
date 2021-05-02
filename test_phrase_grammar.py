@@ -29,6 +29,10 @@ from hinton import plot
 def mean(x):
     return sum(x) / len(x)
 
+def compare_undirected(pred, deps):
+    pred_pairs = set(sorted(x) for x in enumerate(pred))
+    deps_pairs = set(sorted(x) for x in enumerate(deps))
+    return len(pred_pairs & deps_pairs)
 
 @torch.no_grad()
 def test(parser, corpus, device, prt=False, mode='tree'):
@@ -52,6 +56,7 @@ def test(parser, corpus, device, prt=False, mode='tree'):
     dataset = zip(corpus.parser_test, corpus.parser_test_heads)
 
     correct = 0.0
+    undir_correct = 0.0
     total = 0.0
 
     for x, deps in dataset:
@@ -73,6 +78,7 @@ def test(parser, corpus, device, prt=False, mode='tree'):
             raise Exception
         
         correct += (pred == deps).sum()
+        undir_correct += compare_undirected(pred, deps)
         total += len(sen)
 
         nsens += 1
@@ -90,8 +96,9 @@ def test(parser, corpus, device, prt=False, mode='tree'):
     print('-' * 89)
 
     dda = correct / total
+    uda = undir_correct / total
 
-    return float(dda)
+    return float(dda), float(uda)
 
 
 if __name__ == '__main__':
@@ -144,6 +151,6 @@ if __name__ == '__main__':
         eval_device = torch.device('cpu')
 
     print('=' * 89)
-    uas = test(model, ptb_corpus, eval_device, prt=args.print, mode=args.mode)
-    print('Stanford Style: %.3f UAS' % (uas))
+    uas, uuas = test(model, ptb_corpus, eval_device, prt=args.print, mode=args.mode)
+    print('Stanford Style: %.3f UAS, %.3f UUAS' % (uas, uuas))
     print('=' * 89)
