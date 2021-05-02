@@ -30,8 +30,8 @@ def mean(x):
     return sum(x) / len(x)
 
 def compare_undirected(pred, deps):
-    pred_pairs = set(sorted(x) for x in enumerate(pred))
-    deps_pairs = set(sorted(x) for x in enumerate(deps))
+    pred_pairs = set(tuple(sorted(x)) for x in enumerate(pred))
+    deps_pairs = set(tuple(sorted(x)) for x in enumerate(deps))
     return len(pred_pairs & deps_pairs)
 
 @torch.no_grad()
