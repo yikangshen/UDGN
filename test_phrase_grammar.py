@@ -21,8 +21,8 @@ import argparse
 import numpy
 import torch
 
-# import data_dep_blipp as data_dep
-import data_dep
+import data_dep_blipp as data_dep
+# import data_dep
 import edmonds
 from hinton import plot
 
@@ -106,7 +106,7 @@ if __name__ == '__main__':
     argpr.add_argument(
         '--data',
         type=str,
-        default='data/LDC2000T43/',
+        default='data/blipp_lg/',
         help='location of the data corpus')
     argpr.add_argument(
         '--checkpoint',
