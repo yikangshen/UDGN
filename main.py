@@ -339,8 +339,8 @@ model_load(args.save)
 
 # Run on test data.
 test_loss, test_masked_acc = evaluate(test_data, test_heads)
-argmax_acc = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
-tree_acc = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
+argmax_acc, _ = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
+tree_acc, _ = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
       'masked UAS {:5.3f} | test UAS {:8.3f} / {:4.3f}'.format(test_loss, math.exp(test_loss),
