@@ -239,9 +239,11 @@ class StructFormer(nn.Module):
             rels = torch.stack([left, right], dim=-1)
         elif self.relations == 'type2':
             rels = torch.stack([head, child], dim=-1)
+            rels = F.normalize(rels, p=1, dim=-1)
         elif self.relations == 'type3':
             rels0 = torch.stack([left, right], dim=-1)
             rels1 = torch.stack([head, child], dim=-1)
+            rels1 = F.normalize(rels1, p=1, dim=-1)
             rels = rels0[:, :, :, :, None] * rels1[:, :, :, None, :]
             rels = rels.view(bsz, length, length, -1)
 
