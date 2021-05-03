@@ -59,6 +59,9 @@ def test(parser, corpus, device, prt=False, mode='tree'):
     undir_correct = 0.0
     total = 0.0
 
+    undirected = 0.0
+    total_undirected = 0.0
+
     for x, deps in dataset:
         sen = [idx2word[idx] for idx in x]
         data = torch.LongTensor([x]).to(device)
@@ -81,6 +84,10 @@ def test(parser, corpus, device, prt=False, mode='tree'):
         undir_correct += compare_undirected(pred, deps)
         total += len(sen)
 
+        thd = 0.2
+        undirected += (mask[0, torch.range(0, len(sen)-1).long(), torch.Tensor(deps).long()] > thd).sum()
+        total_undirected += (mask > thd).sum() / 2
+
         nsens += 1
 
         if prt and nsens % 100 == 0:
@@ -97,6 +104,12 @@ def test(parser, corpus, device, prt=False, mode='tree'):
 
     dda = correct / total
     uda = undir_correct / total
+
+    prec = undirected / total_undirected
+    reca = undirected / total
+    f1 = 2 / (1 / prec + 1 / reca)
+
+    print('Prec: %.3f, Reca: %.3f, F1: %.3f' % (prec, reca, f1))
 
     return float(dda), float(uda)
 

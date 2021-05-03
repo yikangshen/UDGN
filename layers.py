@@ -142,7 +142,8 @@ class MultiheadAttention(nn.Module):
         self.out_proj = nn.Linear(self.hidden_dim, embed_dim, bias=bias)
 
         if nrels > 0:
-            self.rels_bias = nn.Parameter(torch.zeros(num_heads, nrels))
+            self.rels_bias = nn.Parameter(torch.zeros(nrels, num_heads))
+            init.uniform_(self.rels_bias, -0.1, 0.1)
 
         self._reset_parameters()
 
@@ -179,11 +180,11 @@ class MultiheadAttention(nn.Module):
         g = g.reshape(bsz, length, self.num_heads, self.head_dim)
 
         attn_output_weights = torch.einsum('bihd,bjhd->bijh', q, k)
+        if rels is not None:
+            bias = torch.einsum('bijr,rh->bijh', rels, self.rels_bias)
+            attn_output_weights = attn_output_weights + bias
         scaling = self.head_dim ** -0.5
         attn_output_weights = attn_output_weights * scaling
-        if rels is not None:
-            bias = torch.einsum('bijr,hr->bijh', rels, self.rels_bias)
-            attn_output_weights = attn_output_weights + bias
 
         assert list(attn_output_weights.size()) == [
             bsz, length, length, self.num_heads]
