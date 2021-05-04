@@ -138,11 +138,6 @@ class StructFormer(nn.Module):
 
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
-        self.output_als = nn.AdaptiveLogSoftmaxWithLoss(
-                in_features=emb_size,
-                n_classes=ntokens,
-                cutoffs=[100, 1000, 10000],
-        )
 
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
@@ -171,7 +166,7 @@ class StructFormer(nn.Module):
         self.parser_emb.weight.data.uniform_(-initrange, initrange)
         if hasattr(self, 'pos_emb'):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
-        # self.output_layer.bias.data.fill_(0)
+        self.output_layer.bias.data.fill_(0)
 
         init.xavier_uniform_(self.parser_ff.weight)
         init.zeros_(self.parser_ff.bias)
@@ -232,7 +227,8 @@ class StructFormer(nn.Module):
         child = head.transpose(1, 2)
 
         # For better gradient
-        att_mask = head + child - head * child
+        weight = torch.ones((self.nlayers, 3, self.nhead), device=p.device)
+        att_mask = torch.einsum('lrh,brij->lbijh', weight, torch.stack([head, child, -head*child], dim=1))
         
         ones = torch.ones_like(p)
 
@@ -262,7 +258,6 @@ class StructFormer(nn.Module):
 
     def encode(self, x, pos, att_mask, rels):
         """Structformer encoding process."""
-        att_mask = att_mask[None, :, :, :, None].repeat(self.nlayers, 1, 1, 1, self.nhead)
         visibility = self.visibility(x)
         h = self.emb(x)
         if hasattr(self, 'pos_emb'):
@@ -299,7 +294,7 @@ class StructFormer(nn.Module):
         output = self.output_layer(raw_output[target_mask])
         loss = self.criterion(output, y[target_mask])
         return loss, \
-            {'raw_output': raw_output, 'att_mask': att_mask,
+            {'raw_output': raw_output, 'att_mask': att_mask[0, :, :, :, 0],
              'head': head, 'root': raw_output[:, 0],
              'loghead': logp.view(batch_size * length, -1)}
 
