@@ -38,7 +38,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--data',
     type=str,
-    default='data/deps/',
+    default='ptb',
     help='location of the data corpus')
 parser.add_argument('--dict_thd', type=int, default=5,
                     help='upper epoch limit')
@@ -134,7 +134,7 @@ def model_load(fn):
 
 
 print('Loading dataset...')
-corpus = data_dep.Corpus(args.data, thd=args.dict_thd)
+corpus = data_dep.Corpus(dataset=args.data, thd=args.dict_thd)
 
 pad_token = corpus.dictionary.word2idx['<pad>']
 mask_token = corpus.dictionary.word2idx['<mask>']
