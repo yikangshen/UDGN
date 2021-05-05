@@ -53,7 +53,7 @@ parser.add_argument('--nheads', type=int, default=8, help='number of layers')
 parser.add_argument(
     '--lr', type=float, default=0.001, help='initial learning rate')
 parser.add_argument(
-    '--parser_loss', type=float, default=0, help='Parser loss weight')
+    '--parser_loss', action='store_true', help='Parser loss weight')
 parser.add_argument('--ground_truth', action='store_true', help='use CUDA')
 parser.add_argument(
     '--clip', type=float, default=0.25, help='gradient clipping')
@@ -168,7 +168,8 @@ model = structformer.StructFormer(
     pad=pad_token,
     n_parser_layers=args.n_parser_layers,
     relations=args.relations,
-    weight_act=args.weight_act)
+    weight_act=args.weight_act,
+    detach_parser=args.parser_loss)
 
 ###
 if args.resume:
@@ -266,7 +267,7 @@ def train():
         # loss = criterion(output, targets.reshape(-1))
         logp_head = p_dict['loghead']
         parser_loss = head_criterion(logp_head, heads.reshape(-1))
-        (loss + args.parser_loss * parser_loss).backward()
+        (loss + float(args.parser_loss) * parser_loss).backward()
 
         # `clip_grad_norm` helps prevent the exploding gradient problem.
         if args.clip:
@@ -338,8 +339,8 @@ model_load(args.save)
 
 # Run on test data.
 test_loss, test_masked_acc = evaluate(test_data, test_heads)
-argmax_acc = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
-tree_acc = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
+argmax_acc, _ = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
+tree_acc, _ = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
       'masked UAS {:5.3f} | test UAS {:8.3f} / {:4.3f}'.format(test_loss, math.exp(test_loss),

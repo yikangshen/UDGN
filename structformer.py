@@ -90,7 +90,7 @@ class StructFormer(nn.Module):
                  n_parser_layers=3,
                  weight_act='softmax',
                  relations='none',
-                 share_params=False):
+                 detach_parser=False):
         """Initialization.
 
         Args:
@@ -128,16 +128,11 @@ class StructFormer(nn.Module):
         if pos_emb:
             self.pos_emb = nn.Embedding(500, emb_size)
 
-        if share_params:
-            self.size_layers = 1
-        else:
-            self.size_layers = nlayers
-
         self.layers = nn.ModuleList([
             layers.TransformerLayer(
                 emb_size, nhead, head_size,
                 nrels=nrels, dropout=dropout, dropatt=dropatt)
-            for _ in range(self.size_layers)])
+            for _ in range(nlayers)])
 
         self.norm = nn.LayerNorm(emb_size)
 
@@ -162,6 +157,7 @@ class StructFormer(nn.Module):
         self.emb_size = emb_size
         self.pad = pad
         self.relations = relations
+        self.detach_parser = detach_parser
 
 
         self.criterion = nn.CrossEntropyLoss()
@@ -197,6 +193,13 @@ class StructFormer(nn.Module):
           height: syntactic height
         """
 
+        if deps is not None:
+            bsz, length = x.size()
+            p = torch.zeros((bsz, length, length), device=x.device)
+            deps = deps.clamp(min=0)
+            p.scatter_(2, deps[:, :, None], 1)
+            return p, p.log()
+
         mask = (x != self.pad)
         lengths = mask.sum(1).cpu().int()
         visibility = mask[:, None, :].expand(-1, x.size(1), -1)
@@ -210,13 +213,6 @@ class StructFormer(nn.Module):
 
         h = self.drop(h)
         parent, child = self.parser_ff(h).chunk(2, dim=-1)
-
-        if deps is not None:
-            bsz, length = x.size()
-            p = torch.zeros((bsz, length, length), device=x.device)
-            deps = deps.clamp(min=0)
-            p.scatter_(2, deps[:, :, None], 1)
-            return p, torch.zeros_like(p), h
 
         scaling = self.emb_size ** -0.5
         logits = torch.bmm(child, parent.transpose(1, 2)) * scaling
@@ -249,11 +245,18 @@ class StructFormer(nn.Module):
             rels = torch.stack([left, right], dim=-1)
         elif self.relations == 'type2':
             rels = torch.stack([head, child], dim=-1)
+            rels = F.normalize(rels, p=1, dim=-1)
         elif self.relations == 'type3':
             rels0 = torch.stack([left, right], dim=-1)
-            rels1 = torch.stack([left, right], dim=-1)
+            rels1 = torch.stack([head, child], dim=-1)
+            rels1 = F.normalize(rels1, p=1, dim=-1)
             rels = rels0[:, :, :, :, None] * rels1[:, :, :, None, :]
             rels = rels.view(bsz, length, length, -1)
+
+        if self.detach_parser:
+            att_mask = att_mask.detach()
+            if rels is not None:
+                rels = rels.detach()
 
         return att_mask, head, rels
 
@@ -267,8 +270,8 @@ class StructFormer(nn.Module):
             h = h + self.pos_emb(pos)
         h = self.drop(h)
         for i in range(self.nlayers):
-            h = self.layers[i % self.size_layers](
-                h, rels, attn_mask=att_mask[i % self.size_layers],
+            h = self.layers[i](
+                h, rels, attn_mask=att_mask[i],
                 key_padding_mask=visibility)
         return h
 

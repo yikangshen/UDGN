@@ -30,6 +30,10 @@ from hinton import plot
 def mean(x):
     return sum(x) / len(x)
 
+def compare_undirected(pred, deps):
+    pred_pairs = set(tuple(sorted(x)) for x in enumerate(pred))
+    deps_pairs = set(tuple(sorted(x)) for x in enumerate(deps))
+    return len(pred_pairs & deps_pairs)
 
 @torch.no_grad()
 def test(parser, corpus, device, prt=False, mode='tree'):
@@ -53,7 +57,11 @@ def test(parser, corpus, device, prt=False, mode='tree'):
     dataset = zip(corpus.parser_test, corpus.parser_test_heads)
 
     correct = 0.0
+    undir_correct = 0.0
     total = 0.0
+
+    undirected = 0.0
+    total_undirected = 0.0
 
     for x, deps in dataset:
         sen = [idx2word[idx] for idx in x]
@@ -74,7 +82,12 @@ def test(parser, corpus, device, prt=False, mode='tree'):
             raise Exception
 
         correct += (pred == deps).sum()
+        undir_correct += compare_undirected(pred, deps)
         total += len(sen)
+
+        thd = 0.2
+        undirected += (mask[0, torch.range(0, len(sen)-1).long(), torch.Tensor(deps).long()] > thd).sum()
+        total_undirected += (mask > thd).sum() / 2
 
         nsens += 1
 
@@ -91,8 +104,15 @@ def test(parser, corpus, device, prt=False, mode='tree'):
     print('-' * 89)
 
     dda = correct / total
+    uda = undir_correct / total
 
-    return float(dda)
+    prec = undirected / total_undirected
+    reca = undirected / total
+    f1 = 2 / (1 / prec + 1 / reca)
+
+    print('Prec: %.3f, Reca: %.3f, F1: %.3f' % (prec, reca, f1))
+
+    return float(dda), float(uda)
 
 
 if __name__ == '__main__':
@@ -146,6 +166,6 @@ if __name__ == '__main__':
         eval_device = torch.device('cpu')
 
     print('=' * 89)
-    uas = test(model, ptb_corpus, eval_device, prt=args.print, mode=args.mode)
-    print('Stanford Style: %.3f UAS' % (uas))
+    uas, uuas = test(model, ptb_corpus, eval_device, prt=args.print, mode=args.mode)
+    print('Stanford Style: %.3f UAS, %.3f UUAS' % (uas, uuas))
     print('=' * 89)
