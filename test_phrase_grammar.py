@@ -21,8 +21,8 @@ import argparse
 import numpy
 import torch
 
-import data_dep_blipp as data_dep
-# import data_dep
+# import data_dep_blipp as data_dep
+import data_dep
 import edmonds
 from hinton import plot
 
@@ -137,6 +137,7 @@ if __name__ == '__main__':
     # Load data
     print('Loading PTB dataset...')
     ptb_corpus = data_dep.Corpus(args.data)
+
 
     print('Evaluating...')
     if args.cuda:
