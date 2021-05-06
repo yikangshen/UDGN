@@ -20,6 +20,7 @@
 
 import argparse
 import math
+import random
 import time
 
 import numpy as np
@@ -339,12 +340,13 @@ model_load(args.save)
 
 # Run on test data.
 test_loss, test_masked_acc = evaluate(test_data, test_heads)
-argmax_acc, _ = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
-tree_acc, _ = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
+argmax_uas, argmax_uuas = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
+tree_uas, tree_uuas = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
 print('=' * 89)
-print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
-      'masked UAS {:5.3f} | test UAS {:8.3f} / {:4.3f}'.format(test_loss, math.exp(test_loss),
-                                                     test_masked_acc, argmax_acc, tree_acc))
+print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | masked UAS {:5.3f} '
+      '| test UAS {:8.3f} / {:4.3f} | test UUAS {:8.3f} / {:4.3f}'.format(
+          test_loss, math.exp(test_loss), test_masked_acc, 
+          argmax_uas, tree_uas, argmax_uuas, tree_uuas))
 print('=' * 89)
 
-report_objective(tree_acc, name='UAS')
+report_objective(tree_uas, name='UAS')
