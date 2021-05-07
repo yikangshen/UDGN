@@ -88,7 +88,6 @@ class StructFormer(nn.Module):
                  pos_emb=False,
                  pad=0,
                  n_parser_layers=3,
-                 weight_act='softmax',
                  relations='none',
                  detach_parser=False):
         """Initialization.
@@ -145,7 +144,6 @@ class StructFormer(nn.Module):
         self.parser_ff = nn.Linear(emb_size * 2, emb_size * 2)
 
         self.n_parse_layers = n_parser_layers
-        self.weight_act = weight_act
         self.nlayers = nlayers
         self.nhead = nhead
         self.ntokens = ntokens

@@ -70,7 +70,7 @@ parser.add_argument(
 parser.add_argument(
     '--dropatt',
     type=float,
-    default=0,
+    default=0.1,
     help='dropout for rnn layers (0 = no dropout)')
 parser.add_argument(
     '--mask_rate',
@@ -79,9 +79,7 @@ parser.add_argument(
     help='dropout for rnn layers (0 = no dropout)')
 parser.add_argument('--pos_emb', action='store_true', help='use CUDA')
 parser.add_argument(
-    '--weight_act', type=str, default='ones', help='use CUDA')
-parser.add_argument(
-    '--relations', type=str, default='none', help='relation types')
+    '--relations', type=str, default='type1', help='relation types')
 parser.add_argument('--seed', type=int, default=1111, help='random seed')
 parser.add_argument('--nonmono', type=int, default=5, help='random seed')
 parser.add_argument('--cuda', action='store_true', help='use CUDA')
@@ -169,7 +167,6 @@ model = structformer.StructFormer(
     pad=pad_token,
     n_parser_layers=args.n_parser_layers,
     relations=args.relations,
-    weight_act=args.weight_act,
     detach_parser=args.parser_loss)
 
 ###
