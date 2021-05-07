@@ -169,6 +169,20 @@ class StructFormer(nn.Module):
         init.xavier_uniform_(self.parser_ff.weight)
         init.zeros_(self.parser_ff.bias)
 
+    def parser_parameters(self):
+        params = []
+        params.extend(self.parser_emb.parameters())
+        params.extend(self.parser_layers.parameters())
+        params.extend(self.parser_ff.parameters())
+        return params
+
+    def lm_parameters(self):
+        params = []
+        params.extend(self.output_layer.parameters())
+        params.extend(self.layers.parameters())
+        params.extend(self.norm.parameters())
+        return params
+
     def visibility(self, x):
         """Mask pad tokens."""
         visibility = (x != self.pad)
