@@ -138,6 +138,11 @@ class StructFormer(nn.Module):
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
 
+        self.ntag = 10
+        self.tag_emb = nn.Linear(self.ntag, emb_size, bias=False)
+
+        self.tag = nn.Embedding(ntokens, self.ntag)
+
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
 
@@ -162,6 +167,8 @@ class StructFormer(nn.Module):
         initrange = 0.1
         self.emb.weight.data.uniform_(-initrange, initrange)
         self.parser_emb.weight.data.uniform_(-initrange, initrange)
+        self.tag_emb.weight.data.uniform_(-initrange, initrange)
+        self.tag.weight.data.uniform_(-initrange, initrange)
         if hasattr(self, 'pos_emb'):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
         self.output_layer.bias.data.fill_(0)
@@ -211,10 +218,15 @@ class StructFormer(nn.Module):
         lengths = mask.sum(1).cpu().int()
         visibility = mask[:, None, :].expand(-1, x.size(1), -1)
 
-        h = self.parser_emb(x)
-        h = self.drop(h)
+        emb = self.parser_emb(x)
+        emb = self.drop(emb)
+
+        tag = torch.softmax(self.tag(x), dim=-1)
+        tag_emb = self.tag_emb(tag)
+        tag_emb = self.drop(tag_emb)
+
         h = pack_padded_sequence(
-            h, lengths, batch_first=True, enforce_sorted=False)
+            emb + tag_emb, lengths, batch_first=True, enforce_sorted=False)
         h, _ = self.parser_layers(h)
         h, _ = pad_packed_sequence(h, batch_first=True)
 
@@ -226,7 +238,7 @@ class StructFormer(nn.Module):
         logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
-        return p, logits
+        return p, tag, logits
 
     def generate_mask(self, p):
         """Compute head and cibling distribution for each token."""
@@ -294,7 +306,7 @@ class StructFormer(nn.Module):
 
         batch_size, length = x.size()
 
-        p, logp = self.parse(x, deps)
+        p, tag, logp = self.parse(x, deps)
         att_mask, head, rels = self.generate_mask(p)
 
         raw_output = self.encode(x, pos, att_mask, rels)
@@ -306,7 +318,7 @@ class StructFormer(nn.Module):
         loss = self.criterion(output, y[target_mask])
         return loss, \
             {'raw_output': raw_output, 'att_mask': att_mask,
-             'head': head, 'root': raw_output[:, 0],
+             'head': head, 'tag': tag,
              'loghead': logp.view(batch_size * length, -1)}
 
 if __name__ == "__main__":

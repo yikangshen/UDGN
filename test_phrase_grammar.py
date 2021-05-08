@@ -70,6 +70,7 @@ def test(parser, corpus, device, prt=False, mode='tree'):
         _, p_dict = parser(data, data, pos)
         mask = p_dict['att_mask']
         head = p_dict['head']
+        tags = p_dict['tag']
 
         head = head.clone().squeeze(0).cpu().numpy()
 
@@ -92,12 +93,14 @@ def test(parser, corpus, device, prt=False, mode='tree'):
 
         if prt and nsens % 100 == 0:
             mask = mask.clone().squeeze(0).cpu().numpy()
+            tags = tags.clone().squeeze(0).cpu().numpy()
+            tag = numpy.argmax(tags, axis=1)
             index = list(range(len(sen)))
-            for id_i, word_i, pred_i, deps_i, mask_i, head_i in zip(
-                    index, sen, pred, deps, mask, head):
-                print('%2d\t%20s\t%2d\t%2d\t%s\t%s' %
-                      (id_i, word_i, pred_i, deps_i,
-                       plot(head_i, max_val=1), plot(mask_i, max_val=1.)))
+            for id_i, word_i, tag_i, pred_i, deps_i, tags_i, mask_i, head_i in zip(
+                    index, sen, tag, pred, deps, tags, mask, head):
+                print('%2d\t%20s%3d%3d%3d\t%s\t%s\t%s' %
+                      (id_i, word_i, tag_i, pred_i, deps_i,
+                       plot(tags_i, max_val=1.), plot(head_i, max_val=1), plot(mask_i, max_val=1.)))
             print()
 
     print('-' * 89)
