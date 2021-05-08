@@ -82,12 +82,17 @@ class Dictionary(object):
         self.word2idx = {'<unk>': 0, '<pad>': 1, '<mask>': 2}
         self.idx2word = ['<unk>', '<pad>', '<mask>']
 
-        for k, v in self.word2frq.items():
+        total = sum(self.word2frq.values())
+        cover = 0.0
+        sorted_words = sorted(self.word2frq.items(), key=lambda item: item[1])[::-1]
+        for k, v in sorted_words:
             if v >= thd and (k not in self.idx2word):
                 self.idx2word.append(k)
                 self.word2idx[k] = len(self.idx2word) - 1
+                cover += v
 
         print('Number of words:', len(self.idx2word))
+        print('Coverage:', cover / total)
         return len(self.idx2word)
 
 
