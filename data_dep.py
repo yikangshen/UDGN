@@ -27,7 +27,7 @@ WORD_TAGS = [
     'CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD', 'NN',
     'NNS', 'NNP', 'NNPS', 'PDT', 'POS', 'PRP', 'PRP$', 'RB', 'RBR', 'RBS', 'RP',
     'SYM', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'WDT', 'WP',
-    'WP$', 'WRB'
+    'WP$', 'WRB', 'AUX', 'AUXG'
 ]
 CURRENCY_TAGS_WORDS = ['#', '$', 'C$', 'A$']
 ELLIPSIS = [
@@ -82,19 +82,24 @@ class Dictionary(object):
         self.word2idx = {'<unk>': 0, '<pad>': 1, '<mask>': 2}
         self.idx2word = ['<unk>', '<pad>', '<mask>']
 
-        for k, v in self.word2frq.items():
+        total = sum(self.word2frq.values())
+        cover = 0.0
+        sorted_words = sorted(self.word2frq.items(), key=lambda item: item[1])[::-1]
+        for k, v in sorted_words:
             if v >= thd and (k not in self.idx2word):
                 self.idx2word.append(k)
                 self.word2idx[k] = len(self.idx2word) - 1
+                cover += v
 
         print('Number of words:', len(self.idx2word))
+        print('Coverage:', cover / total)
         return len(self.idx2word)
 
 
 class Corpus(object):
     """Word-level language model corpus."""
 
-    def __init__(self, path, thd=0):
+    def __init__(self, dataset='ptb', path='data/deps/', thd=5):
         """Initialization.
 
         Args:
@@ -107,7 +112,7 @@ class Corpus(object):
         if not os.path.exists(path):
             os.mkdir(path)
 
-        dict_file_name = os.path.join(path, 'dict.pkl')
+        dict_file_name = os.path.join(path, dataset + '-dict.pkl')
         if os.path.exists(dict_file_name):
             print('Loading dictionary...')
             self.dictionary = pickle.load(open(dict_file_name, 'rb'))
@@ -116,7 +121,7 @@ class Corpus(object):
             self.dictionary = Dictionary()
             build_dict = True
 
-        label_file_name = os.path.join(path, 'label.pkl')
+        label_file_name = os.path.join(path, dataset + '-label.pkl')
         if os.path.exists(label_file_name):
             print('Loading labels...')
             self.labels = pickle.load(open(label_file_name, 'rb'))
@@ -125,20 +130,79 @@ class Corpus(object):
             self.labels = Dictionary()
             build_label = True
 
-        all_file_ids = ptb.fileids()
-        train_file_ids = []
-        valid_file_ids = []
-        test_file_ids = []
-        parser_test_file_ids = []
-        for file_id in all_file_ids:
-            if 'WSJ/00/WSJ_0000.MRG' <= file_id <= 'WSJ/20/WSJ_2099.MRG':
-                train_file_ids.append(file_id)
-            if 'WSJ/21/WSJ_2100.MRG' <= file_id <= 'WSJ/22/WSJ_2299.MRG':
-                valid_file_ids.append(file_id)
-            if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/24/WSJ_2499.MRG':
-                test_file_ids.append(file_id)
-            if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/23/WSJ_2399.MRG':
-                parser_test_file_ids.append(file_id)
+        if dataset == 'ptb':
+            all_file_ids = ptb.fileids()
+            train_file_ids = []
+            valid_file_ids = []
+            test_file_ids = []
+            parser_test_file_ids = []
+            for file_id in all_file_ids:
+                if 'WSJ/00/WSJ_0000.MRG' <= file_id <= 'WSJ/20/WSJ_2099.MRG':
+                    train_file_ids.append(os.path.expanduser(
+                        "~") + '/nltk_data/corpora/ptb/' + file_id + '.dep')
+                if 'WSJ/21/WSJ_2100.MRG' <= file_id <= 'WSJ/22/WSJ_2299.MRG':
+                    valid_file_ids.append(os.path.expanduser(
+                        "~") + '/nltk_data/corpora/ptb/' + file_id + '.dep')
+                if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/24/WSJ_2499.MRG':
+                    test_file_ids.append(os.path.expanduser(
+                        "~") + '/nltk_data/corpora/ptb/' + file_id + '.dep')
+                if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/23/WSJ_2399.MRG':
+                    parser_test_file_ids.append(os.path.expanduser(
+                        "~") + '/nltk_data/corpora/ptb/' + file_id + '.dep')
+        else:
+            path_1987 = '../data/LDC2000T43/1987/W7_%03d'
+            path_1988 = '../data/LDC2000T43/1988/W8_%03d'
+            path_1989 = '../data/LDC2000T43/1989/W9_%03d'
+
+            train_path_XS = [path_1987 % id for id in [71, 122]] + \
+                            [path_1988 % id for id in [54, 107]] + \
+                            [path_1989 % id for id in [28, 37]]
+
+            train_path_SM = [path_1987 % id for id in [35, 43, 48, 54, 61, 71, 77, 81, 96, 122]] + \
+                            [path_1988 % id for id in [24, 54, 55, 59, 69, 73, 76, 79, 90, 107]] + \
+                            [path_1989 % id for id in [12, 13, 15, 18, 21, 22, 28, 37, 38, 39]]
+
+            train_path_MD = [path_1987 % id for id in [5, 10, 18, 21, 22, 26, 32, 35, 43, 47, 48, 49, 51, 54, 55, 56, 57, 61, 62, 65, 71, 77, 79, 81, 90, 96, 100, 105, 122, 125]] + \
+                            [path_1988 % id for id in [12, 13, 14, 17, 23, 24, 33, 39, 40, 47, 48, 54, 55, 59, 69, 72, 73, 76, 78, 79, 83, 84, 88, 89, 90, 93, 94, 96, 102, 107]] + \
+                            [path_1989 % id for id in range(12, 42)]
+
+            train_path_LG = [path_1987 % id for id in range(3, 128)] + \
+                            [path_1988 % id for id in range(3, 109)] + \
+                            [path_1989 % id for id in range(12, 42)]
+
+            if dataset == 'bllip-xs':
+                train_path = train_path_XS
+            elif dataset == 'bllip-sm':
+                train_path = train_path_SM
+            elif dataset == 'bllip-md':
+                train_path = train_path_MD
+            elif dataset == 'bllip-lg':
+                train_path = train_path_LG
+            valid_path = ['../data/LDC2000T43/1987/W7_001', '../data/LDC2000T43/1988/W8_001', '../data/LDC2000T43/1989/W9_010']
+            test_path = ['../data/LDC2000T43/1987/W7_002', '../data/LDC2000T43/1988/W8_002', '../data/LDC2000T43/1989/W9_011']
+
+            train_file_ids = []
+            for p in train_path:
+                for file_name in os.listdir(p):
+                    if file_name[-4:] == '.dep':
+                        train_file_ids.append(os.path.join(p, file_name))
+            valid_file_ids = []
+            for p in valid_path:
+                for file_name in os.listdir(p)[:500]:
+                    if file_name[-4:] == '.dep':
+                        valid_file_ids.append(os.path.join(p, file_name))
+            test_file_ids = []
+            for p in test_path:
+                for file_name in os.listdir(p)[:1000]:
+                    if file_name[-4:] == '.dep':
+                        test_file_ids.append(os.path.join(p, file_name))
+
+            all_file_ids = ptb.fileids()
+            parser_test_file_ids = []
+            for file_id in all_file_ids:
+                if 'WSJ/23/WSJ_2300.MRG' <= file_id <= 'WSJ/23/WSJ_2399.MRG':
+                    parser_test_file_ids.append(os.path.expanduser(
+                        "~") + '/nltk_data/corpora/ptb/' + file_id + '.dep')
 
         self.train, self.train_heads, self.train_labels \
             = self.tokenize(train_file_ids, build_dict, build_label, thd)
@@ -151,7 +215,7 @@ class Corpus(object):
 
         if build_dict:
             print('Saving dictionary...')
-            dict_file_name = os.path.join(path, 'dict.pkl')
+            dict_file_name = os.path.join(path, dataset + '-dict.pkl')
             pickle.dump(self.dictionary, open(dict_file_name, 'wb'))
 
     def filter_words(self, tree):
@@ -170,8 +234,6 @@ class Corpus(object):
         heads = []
         labels = []
         for file_id_i in file_ids:
-            file_id_i = os.path.expanduser(
-                "~") + '/nltk_data/corpora/ptb/' + file_id_i + '.dep'
             with open(file_id_i, 'r') as trg_file:
                 trg_string = trg_file.read().strip()
                 trg_string_list = trg_string.split('\n\n')

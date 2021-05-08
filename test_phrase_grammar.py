@@ -21,7 +21,6 @@ import argparse
 import numpy
 import torch
 
-# import data_dep_blipp as data_dep
 import data_dep
 import edmonds
 from hinton import plot
@@ -126,7 +125,7 @@ if __name__ == '__main__':
     argpr.add_argument(
         '--data',
         type=str,
-        default='data/blipp_lg/',
+        default='ptb',
         help='location of the data corpus')
     argpr.add_argument(
         '--checkpoint',
@@ -156,7 +155,7 @@ if __name__ == '__main__':
 
     # Load data
     print('Loading PTB dataset...')
-    ptb_corpus = data_dep.Corpus(args.data)
+    ptb_corpus = data_dep.Corpus(dataset=args.data)
 
 
     print('Evaluating...')

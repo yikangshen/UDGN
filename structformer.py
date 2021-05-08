@@ -88,7 +88,6 @@ class StructFormer(nn.Module):
                  pos_emb=False,
                  pad=0,
                  n_parser_layers=3,
-                 weight_act='softmax',
                  relations='none',
                  detach_parser=False):
         """Initialization.
@@ -138,11 +137,6 @@ class StructFormer(nn.Module):
 
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
-        self.output_als = nn.AdaptiveLogSoftmaxWithLoss(
-                in_features=emb_size,
-                n_classes=ntokens,
-                cutoffs=[100, 1000, 10000],
-        )
 
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
@@ -150,7 +144,6 @@ class StructFormer(nn.Module):
         self.parser_ff = nn.Linear(emb_size * 2, emb_size * 2)
 
         self.n_parse_layers = n_parser_layers
-        self.weight_act = weight_act
         self.nlayers = nlayers
         self.nhead = nhead
         self.ntokens = ntokens
@@ -171,10 +164,24 @@ class StructFormer(nn.Module):
         self.parser_emb.weight.data.uniform_(-initrange, initrange)
         if hasattr(self, 'pos_emb'):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
-        # self.output_layer.bias.data.fill_(0)
+        self.output_layer.bias.data.fill_(0)
 
         init.xavier_uniform_(self.parser_ff.weight)
         init.zeros_(self.parser_ff.bias)
+
+    def parser_parameters(self):
+        params = []
+        params.extend(self.parser_emb.parameters())
+        params.extend(self.parser_layers.parameters())
+        params.extend(self.parser_ff.parameters())
+        return params
+
+    def lm_parameters(self):
+        params = []
+        params.extend(self.output_layer.parameters())
+        params.extend(self.layers.parameters())
+        params.extend(self.norm.parameters())
+        return params
 
     def visibility(self, x):
         """Mask pad tokens."""
@@ -231,7 +238,6 @@ class StructFormer(nn.Module):
         head = p.masked_fill(eye, 0)
         child = head.transpose(1, 2)
 
-        # For better gradient
         att_mask = head + child - head * child
         
         ones = torch.ones_like(p)
@@ -262,7 +268,7 @@ class StructFormer(nn.Module):
 
     def encode(self, x, pos, att_mask, rels):
         """Structformer encoding process."""
-        att_mask = att_mask[None, :, :, :, None].repeat(self.nlayers, 1, 1, 1, self.nhead)
+        att_mask = (att_mask + 1e-6).log()
         visibility = self.visibility(x)
         h = self.emb(x)
         if hasattr(self, 'pos_emb'):
@@ -272,7 +278,7 @@ class StructFormer(nn.Module):
         all_layers = [h]
         for i in range(self.nlayers):
             h = self.layers[i](
-                h, rels, attn_mask=att_mask[i],
+                h, rels, attn_mask=att_mask,
                 key_padding_mask=visibility)
             all_layers.append(h)
         return h, all_layers

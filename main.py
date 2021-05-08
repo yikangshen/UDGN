@@ -20,6 +20,7 @@
 
 import argparse
 import math
+import random
 import time
 
 import numpy as np
@@ -28,7 +29,7 @@ import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
 from orion.client import report_objective
 
-import data_dep_blipp as data_dep
+import data_dep
 import structformer
 from utils import batchify
 from test_phrase_grammar import test
@@ -38,7 +39,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     '--data',
     type=str,
-    default='data/LDC2000T43/',
+    default='ptb',
     help='location of the data corpus')
 parser.add_argument('--dict_thd', type=int, default=5,
                     help='upper epoch limit')
@@ -69,7 +70,7 @@ parser.add_argument(
 parser.add_argument(
     '--dropatt',
     type=float,
-    default=0,
+    default=0.1,
     help='dropout for rnn layers (0 = no dropout)')
 parser.add_argument(
     '--mask_rate',
@@ -78,9 +79,7 @@ parser.add_argument(
     help='dropout for rnn layers (0 = no dropout)')
 parser.add_argument('--pos_emb', action='store_true', help='use CUDA')
 parser.add_argument(
-    '--weight_act', type=str, default='ones', help='use CUDA')
-parser.add_argument(
-    '--relations', type=str, default='none', help='relation types')
+    '--relations', type=str, default='type1', help='relation types')
 parser.add_argument('--seed', type=int, default=1111, help='random seed')
 parser.add_argument('--nonmono', type=int, default=5, help='random seed')
 parser.add_argument('--cuda', action='store_true', help='use CUDA')
@@ -134,7 +133,7 @@ def model_load(fn):
 
 
 print('Loading dataset...')
-corpus = data_dep.Corpus(args.data, thd=args.dict_thd)
+corpus = data_dep.Corpus(dataset=args.data, thd=args.dict_thd)
 
 pad_token = corpus.dictionary.word2idx['<pad>']
 mask_token = corpus.dictionary.word2idx['<mask>']
@@ -168,7 +167,6 @@ model = structformer.StructFormer(
     pad=pad_token,
     n_parser_layers=args.n_parser_layers,
     relations=args.relations,
-    weight_act=args.weight_act,
     detach_parser=args.parser_loss)
 
 ###
@@ -339,12 +337,13 @@ model_load(args.save)
 
 # Run on test data.
 test_loss, test_masked_acc = evaluate(test_data, test_heads)
-argmax_acc, _ = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
-tree_acc, _ = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
+argmax_uas, argmax_uuas = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
+tree_uas, tree_uuas = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
 print('=' * 89)
-print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | '
-      'masked UAS {:5.3f} | test UAS {:8.3f} / {:4.3f}'.format(test_loss, math.exp(test_loss),
-                                                     test_masked_acc, argmax_acc, tree_acc))
+print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | masked UAS {:5.3f} '
+      '| test UAS {:8.3f} / {:4.3f} | test UUAS {:8.3f} / {:4.3f}'.format(
+          test_loss, math.exp(test_loss), test_masked_acc, 
+          argmax_uas, tree_uas, argmax_uuas, tree_uuas))
 print('=' * 89)
 
-report_objective(tree_acc, name='UAS')
+report_objective(tree_uas, name='UAS')

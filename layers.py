@@ -189,12 +189,12 @@ class MultiheadAttention(nn.Module):
         assert list(attn_output_weights.size()) == [
             bsz, length, length, self.num_heads]
         assert list(attn_mask.size()) == [
-            bsz, length, length, self.num_heads]
+            bsz, length, length]
 
-        attn_output_weights = torch.softmax(
-            attn_output_weights, dim=-1) * attn_mask
+        attn_output_weights = (torch.log_softmax(
+            attn_output_weights, dim=-1) + attn_mask[:, :, :, None]).exp()
         if key_padding_mask is not None:
-            attn_output_weights.masked_fill_(
+            attn_output_weights = attn_output_weights.masked_fill(
                 ~key_padding_mask[:, :, :, None], 0)
 
         attn_output_weights = self.dropatt(attn_output_weights)
