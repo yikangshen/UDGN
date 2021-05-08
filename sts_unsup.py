@@ -9,6 +9,9 @@ import argparse
 from pprint import pprint
 from torch import nn
 import torch.optim.lr_scheduler as lr_scheduler
+import torch.nn.functional as F
+
+from scipy import stats
 
 def tokenise(x):
     x = x.lower()
@@ -69,119 +72,103 @@ def load_dataset(dataset, dictionary, device):
     data = batchify(data, 4096, pad=dictionary['<pad>'], device=device)
     return  data
 
-
-def pearson_correlation(x, y):
-    x_mean = torch.mean(x)
-    y_mean = torch.mean(y)
-    x_norm = x - x_mean
-    y_norm = y - y_mean
-    denom = (torch.sqrt(torch.sum(x_norm**2)) *
-             torch.sqrt(torch.sum(y_norm**2)))
-    numer = torch.sum(x_norm * y_norm)
-    return numer / denom
-
-def evaluate(cls, dataset):
+def evaluate(cls, dataset, whitened=False):
     cls.eval()
     with torch.no_grad():
         pred_y = []
         true_y = []
         for x, y in dataset:
-            pred_y.append(torch.argmax(cls(x), dim=-1))
+            pred_y.append(cls(x, whitened=whitened))
             true_y.append(y)
         pred_y = torch.cat(pred_y)
         true_y = torch.cat(true_y)
-        score = pearson_correlation(pred_y.float(), true_y.float())
+        score, _ = stats.spearmanr(pred_y.cpu().numpy(), true_y.cpu().numpy())
     return score
-
-
-
 
 class Classifier(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, nhid, nout, dropouti, dropouto, encoder, padding_idx):
+    def __init__(self, encoder, padding_idx):
         super(Classifier, self).__init__()
-
-        self.padding_idx = padding_idx
         self._encoder = encoder
-
-        self.mlp = nn.Sequential(
-            nn.Dropout(dropouti),
-            nn.Linear(4 * nhid, nhid),
-            nn.ELU(),
-            nn.Dropout(dropouto),
-            nn.Linear(nhid, nout),
-        )
-
-
-        self.cost = nn.CrossEntropyLoss()
-        self.init_weights()
-
-    def init_weights(self):
-        initrange = 0.1
-        nn.init.zeros_(self.mlp[-1].weight)
-        nn.init.zeros_(self.mlp[-1].bias)
+        self.padding_idx = padding_idx
 
     def encode(self, x, mask):
         pos = torch.arange(x.size(1), device=x.device)[None, :]
         _, p_dict = self._encoder(x, x, pos)
-        raw_output = p_dict['raw_output']
-        root_emb = torch.mean(raw_output, dim=1)
-#        head = p_dict['head']
-#        root_ = (1 - torch.sum(head, dim=-1)).masked_fill(~mask, 0.)
-#        root_p = root_ / root_.sum(dim=-1, keepdim=True)
-#        root_emb = torch.einsum('bih,bi->bh', raw_output, root_p)
+        all_layers = p_dict['all_layers']
+        all_layers = [all_layers[1], all_layers[-1]]
+        x = sum(all_layers) / len(all_layers)
+        # x = all_layers[-1]
+        root_emb = torch.sum(
+            x.masked_fill(~mask[:, :, None], 0.),
+            dim=1
+        ) / torch.sum(mask, dim=1)[:, None]
+
+        """
+        head = p_dict['head']
+        root_ = (1 - torch.sum(head, dim=-1)).masked_fill(~mask, 0.)
+        root_p = root_ / root_.sum(dim=-1, keepdim=True)
+        root_emb = torch.einsum('bih,bi->bh', raw_output, root_p)
+        """
         return root_emb
 
-    def forward(self, input):
+    def whiten(self, dataset):
+        self.eval()
+        with torch.no_grad():
+            sum_emb = 0.
+            sum_emb_outer = 0.
+            sum_counts = 0
+            for x, _ in dataset:
+                mask = (x!= self.padding_idx)
+                output = self.encode(x, mask)
+                sum_counts += output.size(0)
+                sum_emb += torch.sum(output, dim=0)
+                sum_emb_outer += torch.einsum('bi,bj->ij', output, output)
+            mean = sum_emb / sum_counts
+            cov = sum_emb_outer / sum_counts - mean[:, None] * mean[None, :]
+        u, s, v = torch.linalg.svd(cov)
+        self.mean = mean
+        self.W = u / torch.sqrt(s[None, :])
+
+
+
+    def forward(self, input, whitened=False):
         batch_size = input.size(1)
         mask = (input != self.padding_idx)
         output = self.encode(input, mask)
+        if whitened:
+            output = torch.einsum(
+                'bj,ji->bi',
+                output - self.mean,
+                self.W
+            )
 
-        clause_1_ = output[::2]
-        clause_2_ = output[1::2]
 
-        if self.training:
-            mask = torch.rand_like(clause_1_[:, 0]) > 0.5
-            clause_1 = torch.empty_like(clause_1_)
-            clause_2 = torch.empty_like(clause_2_)
-            clause_1[mask] = clause_1_[mask]
-            clause_2[mask] = clause_2_[mask]
-            clause_1[~mask] = clause_2_[~mask]
-            clause_2[~mask] = clause_1_[~mask]
-        else:
-            clause_1 = clause_1_
-            clause_2 = clause_2_
+        clause_1 = output[::2]
+        clause_2 = output[1::2]
+        # output = torch.sum(-(clause_1 - clause_2)**2, dim=1)
+        # output = -torch.sqrt(torch.sum((clause_1 - clause_2)**2, dim=1))
 
-        output = self.mlp(torch.cat([
-            clause_1, clause_2,
-            clause_1 * clause_2,
-            torch.abs(clause_1 - clause_2)
-        ], dim=1))
+        output = F.cosine_similarity(clause_1, clause_2, dim=1)
+        # output = F.cosine_similarity(clause_1, clause_2, dim=1)
         return output
 
-    def loss(self, output, y):
-        score_mu = torch.arange(output.size(1),
-                                device=y.device,
-                                dtype=torch.float)
-        dists = -0.5 * (score_mu[None, :] - y[:, None])**2
-        log_p = torch.log_softmax(output, dim=-1)
-
-        return -torch.logsumexp(log_p + dists, dim=-1).mean()
-
-
-
 if __name__ == "__main__":
+    import sts
     parser = argparse.ArgumentParser(description='Finetune on STS-B')
+    parser.add_argument('--whiten', action='store_true', help='use whiten')
     parser.add_argument('--dictionary', type=str, help='Dictionary location')
     parser.add_argument('--model', type=str, help='Model location')
     parser.add_argument('--cuda', action='store_true', help='use CUDA')
     parser.add_argument('--seed', type=int, default=1111, help='random seed')
-    parser.add_argument(
-        '--lr', type=float, default=0.001, help='initial learning rate')
+    parser.add_argument( '--lr', type=float, default=0.001, help='initial learning rate')
     parser.add_argument(
         '--epochs', type=int, default=50, help='Number of epochs')
     args = parser.parse_args()
+    taskpath ="/datadrive/shawn/code/SentEval/data/downstream/STS/"
+    taskpath_year = taskpath + "STS%d-en-test"
+    taskpath_stsb = taskpath + "STSBenchmark"
 
     # Load data
     print("Loading data...")
@@ -199,11 +186,6 @@ if __name__ == "__main__":
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
-
-    train_data = load_dataset(dataset['train'], dictionary, device=device)
-    valid_data = load_dataset(dataset['validation'], dictionary, device=device)
-    test_data = load_dataset(dataset['test'], dictionary, device=device)
-
     print('Loading model...')
     with open(args.model, 'rb') as f:
         model, _, _, _ = torch.load(f, map_location=device)
@@ -211,36 +193,25 @@ if __name__ == "__main__":
         if args.cuda:
             model.cuda()
 
-    print('Initialising classfier...')
-    cls = Classifier(
-        nhid=512, nout=6,
-        dropouti=0.1, dropouto=0.1,
-        encoder=model,
-        padding_idx=dictionary['<pad>']
-    ).to(device)
-    pprint([n for n, _ in cls.named_parameters()]) 
-    mlm_params = [p for n, p in cls.named_parameters()
-                  if n.startswith('_encoder.layers') ] + \
-                 [cls._encoder.emb.weight]
-    cls_params = [p for n, p in cls.named_parameters()
-                  if not n.startswith('_encoder') ]
+    # STS-B
+    train_data = load_dataset(dataset['train'], dictionary, device=device)
+    valid_data = load_dataset(dataset['validation'], dictionary, device=device)
+    # test_data = load_dataset(dataset['test'], dictionary, device=device)
+    cls = Classifier(encoder=model,
+                     padding_idx=dictionary['<pad>']).to(device)
 
-    params = mlm_params + cls_params
-    optimizer = torch.optim.Adam(params, lr=args.lr)
-    scheduler = lr_scheduler.ReduceLROnPlateau(
-        optimizer, 'max', 0.5, patience=2, threshold=0)
+    evals = [eval("sts.STS%dEval" % year)(taskpath_year % year)
+             for year in [12, 13, 14, 15, 16]] + [sts.STSBenchmarkEval(taskpath_stsb)]
+    whiten_set = [] # train_data
+    for se in evals:
+        whiten_set += load_dataset(se.data, dictionary, device=device)
+    cls.whiten(whiten_set)
+    for se in evals:
+        test_data = load_dataset(se.data, dictionary, device=device)
+        test_score = evaluate(cls, test_data, whitened=args.whiten)
+        print(type(se).__name__, test_score)
 
 
-    for epoch in range(args.epochs):
-        cls.train()
-        for x, y in train_data:
-            loss = cls.loss(cls(x), y)
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        val_score = evaluate(cls, valid_data)
-        print("Epoch", epoch, "score:", val_score)
-        scheduler.step(val_score)
-    test_score = evaluate(cls, test_data)
-    print("Test score:", test_score)
+
+
 
