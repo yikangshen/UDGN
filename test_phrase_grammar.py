@@ -160,6 +160,7 @@ if __name__ == '__main__':
     print('Loading PTB dataset...')
     ptb_corpus = data_dep.Corpus(dataset=args.data)
 
+
     print('Evaluating...')
     if args.cuda:
         eval_device = torch.device('cuda:0')

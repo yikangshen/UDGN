@@ -286,11 +286,13 @@ class StructFormer(nn.Module):
             assert pos.max() < 500
             h = h + self.pos_emb(pos)
         h = self.drop(h)
+        all_layers = [h]
         for i in range(self.nlayers):
             h = self.layers[i](
                 h, rels, attn_mask=att_mask,
                 key_padding_mask=visibility)
-        return h
+            all_layers.append(h)
+        return h, all_layers
 
     def forward(self, x, y, pos, deps=None):
         """Pass the input through the encoder layer.
@@ -308,7 +310,7 @@ class StructFormer(nn.Module):
         p, tag, logp = self.parse(x, deps)
         att_mask, head, rels = self.generate_mask(p)
 
-        raw_output = self.encode(x, pos, att_mask, rels)
+        raw_output, all_layers = self.encode(x, pos, att_mask, rels)
         raw_output = self.norm(raw_output)
         raw_output = self.drop(raw_output)
 
@@ -318,7 +320,8 @@ class StructFormer(nn.Module):
         return loss, \
             {'raw_output': raw_output, 'att_mask': att_mask,
              'head': head, 'tag': tag,
-             'loghead': logp.view(batch_size * length, -1)}
+             'loghead': logp.view(batch_size * length, -1),
+             'all_layers': all_layers}
 
 if __name__ == "__main__":
     sf = StructFormer(
