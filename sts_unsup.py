@@ -155,7 +155,9 @@ class Classifier(nn.Module):
         return output
 
 if __name__ == "__main__":
+    import sts
     parser = argparse.ArgumentParser(description='Finetune on STS-B')
+    parser.add_argument('--whiten', action='store_true', help='use whiten')
     parser.add_argument('--dictionary', type=str, help='Dictionary location')
     parser.add_argument('--model', type=str, help='Model location')
     parser.add_argument('--cuda', action='store_true', help='use CUDA')
@@ -164,6 +166,9 @@ if __name__ == "__main__":
     parser.add_argument(
         '--epochs', type=int, default=50, help='Number of epochs')
     args = parser.parse_args()
+    taskpath ="/datadrive/shawn/code/SentEval/data/downstream/STS/"
+    taskpath_year = taskpath + "STS%d-en-test"
+    taskpath_stsb = taskpath + "STSBenchmark"
 
     # Load data
     print("Loading data...")
@@ -181,24 +186,32 @@ if __name__ == "__main__":
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
-
-    train_data = load_dataset(dataset['train'], dictionary, device=device)
-    valid_data = load_dataset(dataset['validation'], dictionary, device=device)
-    test_data = load_dataset(dataset['validation'], dictionary, device=device)
     print('Loading model...')
     with open(args.model, 'rb') as f:
         model, _, _, _ = torch.load(f, map_location=device)
         torch.cuda.manual_seed(args.seed)
         if args.cuda:
             model.cuda()
+
+    # STS-B
+    train_data = load_dataset(dataset['train'], dictionary, device=device)
+    valid_data = load_dataset(dataset['validation'], dictionary, device=device)
+    # test_data = load_dataset(dataset['test'], dictionary, device=device)
     cls = Classifier(encoder=model,
                      padding_idx=dictionary['<pad>']).to(device)
 
-    cls.whiten(train_data)
+    evals = [eval("sts.STS%dEval" % year)(taskpath_year % year)
+             for year in [12, 13, 14, 15, 16]] + [sts.STSBenchmarkEval(taskpath_stsb)]
+    whiten_set = [] # train_data
+    for se in evals:
+        whiten_set += load_dataset(se.data, dictionary, device=device)
+    cls.whiten(whiten_set)
+    for se in evals:
+        test_data = load_dataset(se.data, dictionary, device=device)
+        test_score = evaluate(cls, test_data, whitened=args.whiten)
+        print(type(se).__name__, test_score)
 
 
-    test_score = evaluate(cls, test_data)
-    print("Test score:", test_score)
-    test_score = evaluate(cls, test_data, whitened=True)
-    print("Test score (Whitened):", test_score)
+
+
 
