@@ -138,10 +138,10 @@ class StructFormer(nn.Module):
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
 
-        self.ntag = 10
+        self.ntag = 5
         self.tag_emb = nn.Linear(self.ntag, emb_size, bias=False)
 
-        self.tag = nn.Embedding(ntokens, self.ntag + 1)
+        self.tag = nn.Embedding(ntokens, self.ntag)
 
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
@@ -221,7 +221,7 @@ class StructFormer(nn.Module):
         # emb = self.parser_emb(x)
 
         tag = torch.softmax(self.tag(x), dim=-1)
-        emb = self.tag_emb(tag[:, :, 1:]) + self.parser_emb(x) * tag[:, :, 0, None]
+        emb = self.tag_emb(tag) + self.parser_emb(x) 
 
         h = self.drop(emb)
         h = pack_padded_sequence(
