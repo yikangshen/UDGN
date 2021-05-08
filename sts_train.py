@@ -1,14 +1,16 @@
+import argparse
+import pickle
+import random
+import re
+
 import datasets
 import nltk
-import re
-import pickle
-import numpy as np
 import torch
-import random
-import argparse
-from pprint import pprint
-from torch import nn
 import torch.optim.lr_scheduler as lr_scheduler
+from torch import nn
+
+from structformer import StructFormer
+
 
 def tokenise(x):
     x = x.lower()
@@ -18,24 +20,21 @@ def tokenise(x):
 
 def batchify(items, bsz, device, pad=0, shuffle=True):
     """Batchify the training data."""
-    items = sorted(items, key=lambda x: max(x[0], x[1]))
+    if shuffle:
+        random.shuffle(items)
 
     def get_batches():
         buffer_x1x2 = []
         buffer_y = []
-        total_length = 0
         for sentence1, sentence2, score in items:
-            item_length = len(sentence1) + len(sentence2)
-            if total_length + item_length > bsz:
+            if len(buffer_y) == bsz:
                 yield buffer_x1x2, buffer_y
                 buffer_x1x2 = []
                 buffer_y = []
-                total_length = 0
 
             buffer_x1x2.append(sentence1)
             buffer_x1x2.append(sentence2)
             buffer_y.append(score)
-            total_length += item_length
 
         if len(buffer_x1x2) > 0:
             yield buffer_x1x2, buffer_y
@@ -52,9 +51,6 @@ def batchify(items, bsz, device, pad=0, shuffle=True):
         x1x2, y = create_padded_tensor(buffer_x1x2, buffer_y)
         data_batched.append((x1x2, y))
 
-    if shuffle:
-        random.shuffle(data_batched)
-
     return data_batched
 
 def load_dataset(dataset, dictionary, device):
@@ -66,7 +62,7 @@ def load_dataset(dataset, dictionary, device):
         idxs1 = [dictionary[w] for w in tokenise(sentence1)]
         idxs2 = [dictionary[w] for w in tokenise(sentence2)]
         data.append((idxs1, idxs2, score))
-    data = batchify(data, 4096, pad=dictionary['<pad>'], device=device)
+    data = batchify(data, 128, pad=dictionary['<pad>'], device=device)
     return  data
 
 
@@ -86,7 +82,7 @@ def evaluate(cls, dataset):
         pred_y = []
         true_y = []
         for x, y in dataset:
-            pred_y.append(torch.argmax(cls(x), dim=-1))
+            pred_y.append(cls(x))
             true_y.append(y)
         pred_y = torch.cat(pred_y)
         true_y = torch.cat(true_y)
@@ -99,7 +95,7 @@ def evaluate(cls, dataset):
 class Classifier(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, nhid, nout, dropouti, dropouto, encoder, padding_idx):
+    def __init__(self, nhid, nout, dropouti, dropouto, encoder: StructFormer, padding_idx):
         super(Classifier, self).__init__()
 
         self.padding_idx = padding_idx
@@ -107,10 +103,11 @@ class Classifier(nn.Module):
 
         self.mlp = nn.Sequential(
             nn.Dropout(dropouti),
-            nn.Linear(4 * nhid, nhid),
+            nn.Linear(2 * nhid, nhid),
             nn.ELU(),
             nn.Dropout(dropouto),
-            nn.Linear(nhid, nout),
+            nn.Linear(nhid, 1),
+            nn.Sigmoid(),
         )
 
 
@@ -118,47 +115,44 @@ class Classifier(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        initrange = 0.1
-        nn.init.zeros_(self.mlp[-1].weight)
-        nn.init.zeros_(self.mlp[-1].bias)
+        nn.init.xavier_uniform_(self.mlp[-2].weight)
+        nn.init.zeros_(self.mlp[-2].bias)
 
     def encode(self, x, mask):
         pos = torch.arange(x.size(1), device=x.device)[None, :]
         _, p_dict = self._encoder(x, x, pos)
         raw_output = p_dict['raw_output']
-        root_emb = torch.mean(raw_output, dim=1)
-#        head = p_dict['head']
-#        root_ = (1 - torch.sum(head, dim=-1)).masked_fill(~mask, 0.)
-#        root_p = root_ / root_.sum(dim=-1, keepdim=True)
-#        root_emb = torch.einsum('bih,bi->bh', raw_output, root_p)
+        root_emb = torch.sum(
+            raw_output.masked_fill(~mask[:, :, None], 0.),
+            dim=1
+        ) / torch.sum(mask, dim=1)[:, None]
         return root_emb
 
     def forward(self, input):
-        batch_size = input.size(1)
         mask = (input != self.padding_idx)
         output = self.encode(input, mask)
 
-        clause_1_ = output[::2]
-        clause_2_ = output[1::2]
+        clause_1 = output[::2]
+        clause_2 = output[1::2]
 
-        if self.training:
-            mask = torch.rand_like(clause_1_[:, 0]) > 0.5
-            clause_1 = torch.empty_like(clause_1_)
-            clause_2 = torch.empty_like(clause_2_)
-            clause_1[mask] = clause_1_[mask]
-            clause_2[mask] = clause_2_[mask]
-            clause_1[~mask] = clause_2_[~mask]
-            clause_2[~mask] = clause_1_[~mask]
-        else:
-            clause_1 = clause_1_
-            clause_2 = clause_2_
+        # if self.training:
+        #     mask = torch.rand_like(clause_1_[:, 0]) > 0.5
+        #     clause_1 = torch.empty_like(clause_1_)
+        #     clause_2 = torch.empty_like(clause_2_)
+        #     clause_1[mask] = clause_1_[mask]
+        #     clause_2[mask] = clause_2_[mask]
+        #     clause_1[~mask] = clause_2_[~mask]
+        #     clause_2[~mask] = clause_1_[~mask]
+        # else:
+        #     clause_1 = clause_1_
+        #     clause_2 = clause_2_
 
         output = self.mlp(torch.cat([
-            clause_1, clause_2,
+            # clause_1, clause_2,
             clause_1 * clause_2,
             torch.abs(clause_1 - clause_2)
         ], dim=1))
-        return output
+        return output.squeeze(-1) * 5
 
     def loss(self, output, y):
         score_mu = torch.arange(output.size(1),
@@ -206,10 +200,8 @@ if __name__ == "__main__":
 
     print('Loading model...')
     with open(args.model, 'rb') as f:
-        model, _, _, _ = torch.load(f, map_location=device)
+        model, _, _, _ = torch.load(f, map_location=torch.device('cpu'))
         torch.cuda.manual_seed(args.seed)
-        if args.cuda:
-            model.cuda()
 
     print('Initialising classfier...')
     cls = Classifier(
@@ -218,28 +210,26 @@ if __name__ == "__main__":
         encoder=model,
         padding_idx=dictionary['<pad>']
     ).to(device)
-    pprint([n for n, _ in cls.named_parameters()]) 
-    mlm_params = [p for n, p in cls.named_parameters()
-                  if n.startswith('_encoder.layers') ] + \
-                 [cls._encoder.emb.weight]
-    cls_params = [p for n, p in cls.named_parameters()
-                  if not n.startswith('_encoder') ]
+    print('done')
+    mlm_params = cls._encoder.lm_parameters()
+    cls_params = list(cls.mlp.parameters())
 
     params = mlm_params + cls_params
     optimizer = torch.optim.Adam(params, lr=args.lr)
     scheduler = lr_scheduler.ReduceLROnPlateau(
         optimizer, 'max', 0.5, patience=2, threshold=0)
 
-
+    criterion = nn.MSELoss()
     for epoch in range(args.epochs):
         cls.train()
         for x, y in train_data:
-            loss = cls.loss(cls(x), y)
+            output = cls(x)
+            loss = criterion(output, y)
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
         val_score = evaluate(cls, valid_data)
-        print("Epoch", epoch, "score:", val_score)
+        print("Epoch %3d, Score: %.3f" % (epoch, val_score))
         scheduler.step(val_score)
     test_score = evaluate(cls, test_data)
     print("Test score:", test_score)
