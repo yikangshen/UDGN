@@ -141,7 +141,7 @@ class StructFormer(nn.Module):
 
         self.tag_emb = nn.Linear(ntags, emb_size, bias=False)
 
-        self.tag = nn.Embedding(ntokens, ntags)
+        self.tag = nn.Embedding(ntokens, ntags + 1)
 
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)
@@ -168,7 +168,7 @@ class StructFormer(nn.Module):
         self.emb.weight.data.uniform_(-initrange, initrange)
         self.parser_emb.weight.data.uniform_(-initrange, initrange)
         self.tag_emb.weight.data.uniform_(-initrange, initrange)
-        self.tag.weight.data.uniform_(-initrange, initrange)
+        self.tag.weight.data.zero_()
         if hasattr(self, 'pos_emb'):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
         self.output_layer.bias.data.fill_(0)
@@ -221,7 +221,7 @@ class StructFormer(nn.Module):
         # emb = self.parser_emb(x)
 
         tag = torch.softmax(self.tag(x), dim=-1)
-        emb = self.tag_emb(tag) + self.parser_emb(x) 
+        emb = self.tag_emb(tag[:, :, 1:]) + self.parser_emb(x) 
 
         h = self.drop(emb)
         h = pack_padded_sequence(
