@@ -88,6 +88,7 @@ class StructFormer(nn.Module):
                  pos_emb=False,
                  pad=0,
                  n_parser_layers=3,
+                 ntags=5,
                  relations='none',
                  detach_parser=False):
         """Initialization.
@@ -138,10 +139,9 @@ class StructFormer(nn.Module):
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
 
-        self.ntag = 5
-        self.tag_emb = nn.Linear(self.ntag, emb_size, bias=False)
+        self.tag_emb = nn.Linear(ntags, emb_size, bias=False)
 
-        self.tag = nn.Embedding(ntokens, self.ntag)
+        self.tag = nn.Embedding(ntokens, ntags)
 
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=dropout, batch_first=True, bidirectional=True)

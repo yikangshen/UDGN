@@ -50,6 +50,8 @@ parser.add_argument(
 parser.add_argument('--nlayers', type=int, default=8, help='number of layers')
 parser.add_argument(
     '--n_parser_layers', type=int, default=3, help='number of layers')
+parser.add_argument(
+    '--ntags', type=int, default=5, help='number of postags')
 parser.add_argument('--nheads', type=int, default=8, help='number of layers')
 parser.add_argument(
     '--lr', type=float, default=0.001, help='initial learning rate')
@@ -166,6 +168,7 @@ model = structformer.StructFormer(
     pos_emb=args.pos_emb,
     pad=pad_token,
     n_parser_layers=args.n_parser_layers,
+    ntags=args.ntags,
     relations=args.relations,
     detach_parser=args.parser_loss)
 

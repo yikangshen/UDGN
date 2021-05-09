@@ -215,7 +215,7 @@ if __name__ == "__main__":
     cls_params = list(cls.mlp.parameters())
 
     params = mlm_params + cls_params
-    optimizer = torch.optim.Adam(params, lr=args.lr)
+    optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=1e-6)
     scheduler = lr_scheduler.ReduceLROnPlateau(
         optimizer, 'max', 0.5, patience=2, threshold=0)
 
