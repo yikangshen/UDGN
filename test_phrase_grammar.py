@@ -22,7 +22,7 @@ import numpy
 import torch
 
 import data_dep
-import edmonds
+from ufal.chu_liu_edmonds import chu_liu_edmonds
 from hinton import plot
 
 
@@ -33,6 +33,24 @@ def compare_undirected(pred, deps):
     pred_pairs = set(tuple(sorted(x)) for x in enumerate(pred))
     deps_pairs = set(tuple(sorted(x)) for x in enumerate(deps))
     return len(pred_pairs & deps_pairs)
+
+def dms(weights):
+    weights = numpy.pad(weights, ((1, 0), (1, 0)), mode='constant')
+    best_score = -numpy.inf
+    best_heads = None
+    for i in range(1, weights.shape[0]):
+        W = weights.copy()
+        W[:, 0] = numpy.nan
+        W[i, 0] = 0.
+        heads, tree_score = chu_liu_edmonds(W)
+        if tree_score > best_score:
+            best_score = tree_score
+            best_heads = heads
+    heads = numpy.array(best_heads) - 1
+    pred = heads[1:]
+    pred[pred == -1] = numpy.arange(pred.shape[0])[pred == -1]
+    return pred
+
 
 @torch.no_grad()
 def test(parser, corpus, device, prt=False, mode='tree'):
@@ -77,10 +95,10 @@ def test(parser, corpus, device, prt=False, mode='tree'):
         if mode == 'argmax':
             pred = numpy.argmax(head, axis=1)
         elif mode == 'tree':
-            pred = edmonds.single_root_msa(numpy.log(head))
+            weights = numpy.log(head).astype(numpy.float)
+            pred = dms(weights)
         else:
             raise Exception
-
         correct += (pred == deps).sum()
         undir_correct += compare_undirected(pred, deps)
         total += len(sen)
