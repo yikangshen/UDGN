@@ -95,7 +95,7 @@ def test(parser, corpus, device, prt=False, mode='tree'):
         if mode == 'argmax':
             pred = numpy.argmax(head, axis=1)
         elif mode == 'tree':
-            weights = numpy.log(head).astype(numpy.float)
+            weights = numpy.log(head + 1e-9).astype(numpy.float)
             pred = dms(weights)
         else:
             raise Exception
