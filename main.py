@@ -182,8 +182,7 @@ elif args.model == 'transformer':
         dropout=args.dropout,
         dropatt=args.dropatt,
         pos_emb=args.pos_emb,
-        pad=pad_token,
-        n_parser_layers=args.n_parser_layers)
+        pad=pad_token)
 elif args.model == 'DSAN':
     model = structformer.DSAN(
         emb_size=args.nemb,
