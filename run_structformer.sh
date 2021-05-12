@@ -1,0 +1,1 @@
+python main.py --cuda --pos_emb --save structformer.pt --model structformer --dropout 0.1 --dropatt 0 --lr 0.0003

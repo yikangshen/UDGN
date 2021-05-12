@@ -88,7 +88,6 @@ def test(parser, corpus, device, prt=False, mode='tree'):
         _, p_dict = parser(data, data, pos)
         mask = p_dict['att_mask']
         head = p_dict['head']
-        tags = p_dict['tag']
 
         head = head.clone().squeeze(0).cpu().numpy()
 
@@ -110,6 +109,7 @@ def test(parser, corpus, device, prt=False, mode='tree'):
         nsens += 1
 
         if prt and nsens % 100 == 0:
+            tags = p_dict['tag']
             mask = mask.clone().squeeze(0).cpu().numpy()
             tags = tags.clone().squeeze(0).cpu().numpy()
             tag = numpy.argmax(tags, axis=1)

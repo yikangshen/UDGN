@@ -185,7 +185,8 @@ class Transformer(nn.Module):
         return loss, {
             'raw_output': raw_output, 
             'head': torch.zeros((batch_size, length, length), device=x.device), 
-            'loghead': torch.zeros((batch_size * length, length), device=x.device)}
+            'loghead': torch.zeros((batch_size * length, length), device=x.device),
+            'att_mask': torch.zeros((batch_size, length, length), device=x.device)}
 
 
 class StructFormer(Transformer):
@@ -436,7 +437,7 @@ class StructFormer(Transformer):
 
         return loss, \
             {'raw_output': raw_output, 'distance': distance, 'height': height,
-             'head': head, 'block': block, 'loghead': loghead.view(batch_size * length, -1)}
+             'head': head, 'att_mask': block, 'loghead': loghead.view(batch_size * length, -1)}
 
 
 class DSAN(nn.Module):

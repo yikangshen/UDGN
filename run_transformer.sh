@@ -1,0 +1,1 @@
+python main.py --cuda --pos_emb --save transformer.pt --model transformer --dropout 0.1 --dropatt 0 --lr 0.0003

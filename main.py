@@ -334,8 +334,6 @@ try:
         scheduler = lr_scheduler.ReduceLROnPlateau(
             optimizer, 'min', 0.5, patience=2, threshold=0)
 
-    model_save(args.save)
-
     for epoch in range(1, args.epochs + 1):
         epoch_start_time = time.time()
 
