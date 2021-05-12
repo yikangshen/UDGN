@@ -212,28 +212,27 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-6)
     scheduler = lr_scheduler.ReduceLROnPlateau(
         optimizer, 'max', 0.5, patience=2, threshold=0)
-    if False:
-        criterion = nn.MSELoss()
-        best_score = -1.
-        try:
-            for epoch in range(args.epochs):
-                cls.train()
-                train_data = load_dataset(dataset['train'], dictionary, device=device, bsz=args.bsz)
-                for x, y in train_data:
-                    output = cls(x)
-                    loss = criterion(output, y)
-                    loss.backward()
-                    optimizer.step()
-                    optimizer.zero_grad()
-                val_score = evaluate(cls, valid_data)
-                if val_score > best_score:
-                    best_score = val_score
-                    torch.save(cls, 'sts_ft.pt')
-                print("Epoch %3d, Score: %.3f" % (epoch, val_score))
-                scheduler.step(val_score)
-        except KeyboardInterrupt:
-            print('-' * 89)
-            print('Exiting from training early')
+    criterion = nn.MSELoss()
+    best_score = -1.
+    try:
+        for epoch in range(args.epochs):
+            cls.train()
+            train_data = load_dataset(dataset['train'], dictionary, device=device, bsz=args.bsz)
+            for x, y in train_data:
+                output = cls(x)
+                loss = criterion(output, y)
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+            val_score = evaluate(cls, valid_data)
+            if val_score > best_score:
+                best_score = val_score
+                torch.save(cls, 'sts_ft.pt')
+            print("Epoch %3d, Score: %.3f" % (epoch, val_score))
+            scheduler.step(val_score)
+    except KeyboardInterrupt:
+        print('-' * 89)
+        print('Exiting from training early')
 
     taskpath ="data/STS/"
     taskpath_year = taskpath + "STS%d-en-test"
