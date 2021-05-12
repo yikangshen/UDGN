@@ -300,3 +300,156 @@ class TransformerLayer(nn.Module):
         src3 = src2 + self.dropout2(src3)
 
         return src3
+
+
+class GatedMultiheadAttention(nn.Module):
+    """Multi-head self-attention layer."""
+
+    def __init__(self,
+                 embed_dim,
+                 head_dim,
+                 num_heads,
+                 nrels=0,
+                 dropout=0.,
+                 dropatt=0.,
+                 bias=True):
+        """Initialization.
+
+        Args:
+          embed_dim: dimension of input embeddings
+          num_heads: number of self-attention heads
+          dropout: dropout rate
+          bias: bool, indicate whether include bias for linear transformations
+          v_proj: bool, indicate whether project inputs to new values
+          out_proj: bool, indicate whether project outputs to new values
+          relative_bias: bool, indicate whether use a relative position based
+            attention bias
+        """
+
+        super(GatedMultiheadAttention, self).__init__()
+        self.embed_dim = embed_dim
+        self.hidden_dim = head_dim * num_heads
+
+        self.num_heads = num_heads
+        self.drop = nn.Dropout(dropout)
+        self.dropatt = nn.Dropout(dropatt)
+        self.head_dim = head_dim
+        self.value_dim = head_dim
+
+        self.proj = nn.Linear(embed_dim, self.hidden_dim * 4, bias=bias)
+        self.out_proj = nn.Linear(self.hidden_dim, embed_dim, bias=bias)
+
+        if nrels > 0:
+            self.rels_bias = nn.Parameter(torch.zeros(nrels, num_heads))
+            init.uniform_(self.rels_bias, -0.1, 0.1)
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        """Initialize attention parameters."""
+
+        init.xavier_uniform_(self.proj.weight)
+        if self.proj.bias is not None:
+            init.constant_(self.proj.bias, 0.)
+
+        init.xavier_uniform_(self.out_proj.weight)
+        if self.out_proj.bias is not None:
+            init.constant_(self.out_proj.bias, 0.)
+
+    def forward(self, query, rels=None, key_padding_mask=None, attn_mask=None):
+        """Compute multi-head self-attention.
+
+        Args:
+          query: input embeddings
+          key_padding_mask: 3D mask that prevents attention to certain positions
+          attn_mask: 3D mask that rescale the attention weight at each position
+        Returns:
+          attn_output: self-attention output
+        """
+
+        bsz, length, embed_dim = query.size()
+        assert embed_dim == self.embed_dim
+
+        q, k, v, g = self.proj(query).chunk(4, dim=-1)
+
+        q = q.reshape(bsz, length, self.num_heads, self.head_dim)
+        k = k.reshape(bsz, length, self.num_heads, self.head_dim)
+        v = v.reshape(bsz, length, self.num_heads, self.head_dim)
+        g = g.reshape(bsz, length, self.num_heads, self.head_dim)
+
+        attn_output_weights = torch.einsum('bihd,bjhd->bijh', q, k)
+        if rels is not None:
+            bias = torch.einsum('bijr,rh->bijh', rels, self.rels_bias)
+            attn_output_weights = attn_output_weights + bias
+        scaling = self.head_dim ** -0.5
+        attn_output_weights = attn_output_weights * scaling
+
+        assert list(attn_output_weights.size()) == [
+            bsz, length, length, self.num_heads]
+        assert list(attn_mask.size()) == [
+            bsz, length, length]
+
+        attn_output_weights = (torch.log_softmax(
+            attn_output_weights, dim=-1) + attn_mask[:, :, :, None]).exp()
+        if key_padding_mask is not None:
+            attn_output_weights = attn_output_weights.masked_fill(
+                ~key_padding_mask[:, :, :, None], 0)
+
+        attn_output_weights = self.dropatt(attn_output_weights)
+
+        attn_output = torch.einsum(
+            'bijh,bjhd->bihd', attn_output_weights, torch.tanh(v))
+        gated_output = attn_output * torch.sigmoid(g)
+        gated_output = gated_output.reshape(bsz, length, self.hidden_dim)
+
+        output = self.out_proj(self.drop(gated_output))
+
+        return output
+
+
+class DSANLayer(nn.Module):
+    """TransformerEncoderLayer is made up of self-attn and feedforward network."""
+
+    def __init__(self,
+                 d_model,
+                 nhead,
+                 d_hidden=64,
+                 nrels=0,
+                 dropout=0.1,
+                 dropatt=0.1):
+        """Initialization.
+
+        Args:
+          d_model: dimension of inputs
+          nhead: number of self-attention heads
+          dim_feedforward: dimension of hidden layer in feedforward layer
+          dropout: dropout rate
+          dropatt: drop attention rate
+          activation: activation function
+          relative_bias: bool, indicate whether use a relative position based
+            attention bias
+        """
+
+        super(DSANLayer, self).__init__()
+        self.self_attn = GatedMultiheadAttention(
+            d_model, d_hidden, nhead, nrels=nrels, dropout=dropout, dropatt=dropatt)
+
+        self.dropout = nn.Dropout(dropout)
+        self.nhead = nhead
+
+    def forward(self, src, ctl=None, attn_mask=None, key_padding_mask=None):
+        """Pass the input through the encoder layer.
+
+        Args:
+          src: the sequence to the encoder layer (required).
+          attn_mask: the mask for the src sequence (optional).
+          key_padding_mask: the mask for the src keys per batch (optional).
+        Returns:
+          src3: the output of transformer layer, share the same shape as src.
+        """
+        src2 = self.self_attn(
+            src, rels=ctl, attn_mask=attn_mask,
+            key_padding_mask=key_padding_mask)
+
+        src2 = src + self.dropout(src2)
+        return src2

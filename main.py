@@ -44,7 +44,7 @@ parser.add_argument(
 parser.add_argument(
     '--model',
     type=str,
-    default='structformer')
+    default='DSAN')
 parser.add_argument('--dict_thd', type=int, default=5,
                     help='upper epoch limit')
 parser.add_argument(
@@ -183,6 +183,21 @@ elif args.model == 'transformer':
         dropatt=args.dropatt,
         pos_emb=args.pos_emb,
         pad=pad_token)
+elif args.model == 'DSAN':
+    model = structformer.StructFormer(
+        emb_size=args.nemb,
+        head_size=args.nhid,
+        nlayers=args.nlayers,
+        ntokens=ntokens,
+        nhead=args.nheads,
+        dropout=args.dropout,
+        dropatt=args.dropatt,
+        pos_emb=args.pos_emb,
+        pad=pad_token,
+        n_parser_layers=args.n_parser_layers,
+        ntags=args.ntags,
+        relations=args.relations,
+        detach_parser=args.parser_loss)
 
 ###
 if args.resume:
