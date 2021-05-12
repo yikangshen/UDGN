@@ -2,6 +2,7 @@ import argparse
 import pickle
 import random
 import re
+import sts
 
 import datasets
 import nltk
@@ -223,25 +224,42 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-6)
     scheduler = lr_scheduler.ReduceLROnPlateau(
         optimizer, 'max', 0.5, patience=2, threshold=0)
+    if False:
+        criterion = nn.MSELoss()
+        best_score = -1.
+        try:
+            for epoch in range(args.epochs):
+                cls.train()
+                train_data = load_dataset(dataset['train'], dictionary, device=device, bsz=args.bsz)
+                for x, y in train_data:
+                    output = cls(x)
+                    loss = criterion(output, y)
+                    loss.backward()
+                    optimizer.step()
+                    optimizer.zero_grad()
+                val_score = evaluate(cls, valid_data)
+                if val_score > best_score:
+                    best_score = val_score
+                    torch.save(cls, 'sts_ft.pt')
+                print("Epoch %3d, Score: %.3f" % (epoch, val_score))
+                scheduler.step(val_score)
+        except KeyboardInterrupt:
+            print('-' * 89)
+            print('Exiting from training early')
 
-    criterion = nn.MSELoss()
-    try:
-        for epoch in range(args.epochs):
-            cls.train()
-            train_data = load_dataset(dataset['train'], dictionary, device=device, bsz=args.bsz)
-            for x, y in train_data:
-                output = cls(x)
-                loss = criterion(output, y)
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
-            val_score = evaluate(cls, valid_data)
-            print("Epoch %3d, Score: %.3f" % (epoch, val_score))
-            scheduler.step(val_score)
-    except KeyboardInterrupt:
-        print('-' * 89)
-        print('Exiting from training early')
+    taskpath ="data/STS/"
+    taskpath_year = taskpath + "STS%d-en-test"
+    taskpath_stsb = taskpath + "STSBenchmark"
+    taskpath_sick = taskpath + "SICK"
 
-    test_score = evaluate(cls, test_data)
-    print("Test score:", test_score)
+    cls = torch.load('sts_ft.pt')
+    stsb_eval = sts.STSBenchmarkEval(taskpath_stsb)
+    sick_eval = sts.SICKRelatednessEval(taskpath_sick)
+    evals = [eval("sts.STS%dEval" % year)(taskpath_year % year)
+             for year in [12, 13, 14, 15, 16]] + [stsb_eval, sick_eval]
+    for se in evals:
+        test_data = load_dataset(se.data, dictionary, device=device,
+                                 bsz=args.bsz)
+        test_score = evaluate(cls, test_data)
+        print(type(se).__name__, test_score)
 

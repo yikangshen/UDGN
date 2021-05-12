@@ -1,4 +1,3 @@
-import datasets
 import nltk
 import re
 import pickle
@@ -16,7 +15,7 @@ from scipy import stats
 def tokenise(x):
     x = x.lower()
     x = re.sub('[0-9]+', 'N', x)
-    x = [w for w in nltk.word_tokenize(x) if re.match('.*[a-zA-Z]+.*', w)]
+    x = [w for w in nltk.word_tokenize(x) if not re.match('[^a-zA-Z]+', w)]
     return x
 
 def batchify(items, bsz, device, pad=0, shuffle=True):
@@ -99,18 +98,10 @@ class Classifier(nn.Module):
         all_layers = p_dict['all_layers']
         all_layers = [all_layers[1], all_layers[-1]]
         x = sum(all_layers) / len(all_layers)
-        # x = all_layers[-1]
         root_emb = torch.sum(
             x.masked_fill(~mask[:, :, None], 0.),
             dim=1
         ) / torch.sum(mask, dim=1)[:, None]
-
-        """
-        head = p_dict['head']
-        root_ = (1 - torch.sum(head, dim=-1)).masked_fill(~mask, 0.)
-        root_p = root_ / root_.sum(dim=-1, keepdim=True)
-        root_emb = torch.einsum('bih,bi->bh', raw_output, root_p)
-        """
         return root_emb
 
     def whiten(self, dataset):
@@ -140,8 +131,7 @@ class Classifier(nn.Module):
         if whitened:
             output = torch.einsum(
                 'bj,ji->bi',
-                output - self.mean,
-                self.W
+                output - self.mean, self.W
             )
 
 
@@ -163,18 +153,18 @@ if __name__ == "__main__":
     parser.add_argument('--cuda', action='store_true', help='use CUDA')
     parser.add_argument('--seed', type=int, default=1111, help='random seed')
     parser.add_argument( '--lr', type=float, default=0.001, help='initial learning rate')
+    parser.add_argument( '--layer', type=int, default=-1, help='Layer number')
     parser.add_argument(
         '--epochs', type=int, default=50, help='Number of epochs')
     args = parser.parse_args()
-    taskpath ="/datadrive/shawn/code/SentEval/data/downstream/STS/"
+    taskpath ="data/STS/"
     taskpath_year = taskpath + "STS%d-en-test"
     taskpath_stsb = taskpath + "STSBenchmark"
+    taskpath_sick = taskpath + "SICK"
 
     # Load data
     print("Loading data...")
-    dataset = datasets.load_dataset('glue', 'stsb')
     dictionary = pickle.load(open(args.dictionary, 'rb'))
-
     torch.manual_seed(args.seed)
 
     if torch.cuda.is_available():
@@ -193,25 +183,22 @@ if __name__ == "__main__":
         if args.cuda:
             model.cuda()
 
-    # STS-B
-    train_data = load_dataset(dataset['train'], dictionary, device=device)
-    valid_data = load_dataset(dataset['validation'], dictionary, device=device)
-    # test_data = load_dataset(dataset['test'], dictionary, device=device)
     cls = Classifier(encoder=model,
                      padding_idx=dictionary['<pad>']).to(device)
-
+    stsb_eval = sts.STSBenchmarkEval(taskpath_stsb)
+    sick_eval = sts.SICKRelatednessEval(taskpath_sick)
     evals = [eval("sts.STS%dEval" % year)(taskpath_year % year)
-             for year in [12, 13, 14, 15, 16]] + [sts.STSBenchmarkEval(taskpath_stsb)]
-    whiten_set = [] # train_data
-    for se in evals:
-        whiten_set += load_dataset(se.data, dictionary, device=device)
+             for year in [12, 13, 14, 15, 16]] + [stsb_eval, sick_eval]
+
+    whiten_set = []
+    for d in ([se.data for se in evals] +
+              [stsb_eval.train, stsb_eval.dev] +
+              [sick_eval.train, sick_eval.dev]):
+        whiten_set += load_dataset(d, dictionary, device=device)
     cls.whiten(whiten_set)
+
     for se in evals:
         test_data = load_dataset(se.data, dictionary, device=device)
         test_score = evaluate(cls, test_data, whitened=args.whiten)
         print(type(se).__name__, test_score)
-
-
-
-
 
