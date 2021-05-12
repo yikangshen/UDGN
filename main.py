@@ -159,7 +159,6 @@ ntokens = len(corpus.dictionary)
 print('Number of tokens: ', ntokens)
 model = structformer.StructFormer(
     emb_size=args.nemb,
-    head_size=args.nhid,
     nlayers=args.nlayers,
     ntokens=ntokens,
     nhead=args.nheads,
@@ -167,10 +166,7 @@ model = structformer.StructFormer(
     dropatt=args.dropatt,
     pos_emb=args.pos_emb,
     pad=pad_token,
-    n_parser_layers=args.n_parser_layers,
-    ntags=args.ntags,
-    relations=args.relations,
-    detach_parser=args.parser_loss)
+    n_parser_layers=args.n_parser_layers)
 
 ###
 if args.resume:
