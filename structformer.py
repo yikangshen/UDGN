@@ -370,8 +370,8 @@ class StructFormer(Transformer):
 
         block_p, block = self.compute_block(distance, height)
         head_p = self.compute_head(height)
-        head = torch.einsum('blij,bijh->blh', block_p, head_p)
-        head = head.masked_fill(eye, 0)
+        head_p = torch.einsum('blij,bijh->blh', block_p, head_p)
+        head = head_p.masked_fill(eye, 0)
         child = head.transpose(1, 2)
         cibling = torch.bmm(head, child).masked_fill(eye, 0)
 
@@ -390,7 +390,7 @@ class StructFormer(Transformer):
         dep = torch.einsum('lhr,brij->lbhij', rel_weight, rel)
         att_mask = dep.reshape(self.nlayers, bsz * self.nhead, length, length)
 
-        return att_mask, head_p.log(), head, block
+        return att_mask, (head_p + 1e-9).log(), head, block
 
     def encode(self, x, pos, att_mask):
         """Structformer encoding process."""
