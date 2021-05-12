@@ -103,7 +103,7 @@ class Classifier(nn.Module):
         self._encoder = encoder
 
         self.mlp = nn.Sequential(
-            nn.Dropout(dropout),
+            # nn.Dropout(dropout),
             nn.Linear(2 * nhid, nhid),
             nn.ELU(),
             nn.Dropout(dropout),
@@ -111,15 +111,13 @@ class Classifier(nn.Module):
             nn.Sigmoid(),
         )
 
-
-        self.cost = nn.CrossEntropyLoss()
         self.init_weights()
 
     def init_weights(self):
-        nn.init.xavier_uniform_(self.mlp[1].weight)
-        nn.init.zeros_(self.mlp[1].bias)
-        nn.init.xavier_uniform_(self.mlp[-2].weight)
-        nn.init.zeros_(self.mlp[-2].bias)
+        nn.init.xavier_uniform_(self.mlp[0].weight)
+        nn.init.zeros_(self.mlp[0].bias)
+        nn.init.xavier_uniform_(self.mlp[3].weight)
+        nn.init.zeros_(self.mlp[3].bias)
 
     def encode(self, x, mask):
         pos = torch.arange(x.size(1), device=x.device)[None, :]
@@ -157,16 +155,6 @@ class Classifier(nn.Module):
         ], dim=1))
         return output.squeeze(-1) * 5
 
-    def loss(self, output, y):
-        score_mu = torch.arange(output.size(1),
-                                device=y.device,
-                                dtype=torch.float)
-        dists = -0.5 * (score_mu[None, :] - y[:, None])**2
-        log_p = torch.log_softmax(output, dim=-1)
-
-        return -torch.logsumexp(log_p + dists, dim=-1).mean()
-
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Finetune on STS-B')
@@ -177,7 +165,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--lr', type=float, default=0.0003, help='initial learning rate')
     parser.add_argument(
-        '--dropout', type=float, default=0.1)
+        '--dropout', type=float, default=0.2)
     parser.add_argument(
         '--epochs', type=int, default=50, help='Number of epochs')
     parser.add_argument(
