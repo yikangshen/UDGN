@@ -102,7 +102,7 @@ class Classifier(nn.Module):
         self._encoder = encoder
 
         self.mlp = nn.Sequential(
-            nn.Dropout(dropout),
+            # nn.Dropout(dropout),
             nn.Linear(2 * nhid, nhid),
             nn.ELU(),
             nn.Dropout(dropout),
@@ -113,10 +113,10 @@ class Classifier(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        nn.init.xavier_uniform_(self.mlp[1].weight)
-        nn.init.zeros_(self.mlp[1].bias)
-        nn.init.xavier_uniform_(self.mlp[4].weight)
-        nn.init.zeros_(self.mlp[4].bias)
+        nn.init.xavier_uniform_(self.mlp[0].weight)
+        nn.init.zeros_(self.mlp[0].bias)
+        nn.init.xavier_uniform_(self.mlp[3].weight)
+        nn.init.zeros_(self.mlp[3].bias)
 
     def encode(self, x, mask):
         pos = torch.arange(x.size(1), device=x.device)[None, :]
@@ -164,7 +164,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--lr', type=float, default=0.0003, help='initial learning rate')
     parser.add_argument(
-        '--dropout', type=float, default=0.1)
+        '--dropout', type=float, default=0.2)
     parser.add_argument(
         '--epochs', type=int, default=50, help='Number of epochs')
     parser.add_argument(
@@ -207,7 +207,7 @@ if __name__ == "__main__":
     mlm_params = cls._encoder.lm_parameters()
     cls_params = list(cls.mlp.parameters())
 
-    params = cls_params
+    params = mlm_params + cls_params
     optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-6)
     scheduler = lr_scheduler.ReduceLROnPlateau(
         optimizer, 'max', 0.5, patience=2, threshold=0)
