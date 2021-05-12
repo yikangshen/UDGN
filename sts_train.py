@@ -110,15 +110,13 @@ class Classifier(nn.Module):
             nn.Sigmoid(),
         )
 
-
-        self.cost = nn.CrossEntropyLoss()
         self.init_weights()
 
     def init_weights(self):
         nn.init.xavier_uniform_(self.mlp[1].weight)
         nn.init.zeros_(self.mlp[1].bias)
-        nn.init.xavier_uniform_(self.mlp[-2].weight)
-        nn.init.zeros_(self.mlp[-2].bias)
+        nn.init.xavier_uniform_(self.mlp[4].weight)
+        nn.init.zeros_(self.mlp[4].bias)
 
     def encode(self, x, mask):
         pos = torch.arange(x.size(1), device=x.device)[None, :]
@@ -155,16 +153,6 @@ class Classifier(nn.Module):
             torch.abs(clause_1 - clause_2)
         ], dim=1))
         return output.squeeze(-1) * 5
-
-    def loss(self, output, y):
-        score_mu = torch.arange(output.size(1),
-                                device=y.device,
-                                dtype=torch.float)
-        dists = -0.5 * (score_mu[None, :] - y[:, None])**2
-        log_p = torch.log_softmax(output, dim=-1)
-
-        return -torch.logsumexp(log_p + dists, dim=-1).mean()
-
 
 
 if __name__ == "__main__":
@@ -219,7 +207,7 @@ if __name__ == "__main__":
     mlm_params = cls._encoder.lm_parameters()
     cls_params = list(cls.mlp.parameters())
 
-    params = mlm_params + cls_params
+    params = cls_params
     optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-6)
     scheduler = lr_scheduler.ReduceLROnPlateau(
         optimizer, 'max', 0.5, patience=2, threshold=0)
