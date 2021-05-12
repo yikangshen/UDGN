@@ -174,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument('--cuda', action='store_true', help='use CUDA')
     parser.add_argument('--seed', type=int, default=1111, help='random seed')
     parser.add_argument(
-        '--lr', type=float, default=0.001, help='initial learning rate')
+        '--lr', type=float, default=0.0003, help='initial learning rate')
     parser.add_argument(
         '--dropout', type=float, default=0.1)
     parser.add_argument(
