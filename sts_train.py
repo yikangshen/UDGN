@@ -53,7 +53,7 @@ def batchify(items, bsz, device, pad=0, shuffle=True):
 
     return data_batched
 
-def load_dataset(dataset, dictionary, device):
+def load_dataset(dataset, dictionary, device, bsz):
     data = []
     for x in dataset:
         sentence1 = x['sentence1']
@@ -62,7 +62,7 @@ def load_dataset(dataset, dictionary, device):
         idxs1 = [dictionary[w] for w in tokenise(sentence1)]
         idxs2 = [dictionary[w] for w in tokenise(sentence2)]
         data.append((idxs1, idxs2, score))
-    data = batchify(data, 128, pad=dictionary['<pad>'], device=device)
+    data = batchify(data, bsz, pad=dictionary['<pad>'], device=device)
     return  data
 
 
@@ -95,17 +95,17 @@ def evaluate(cls, dataset):
 class Classifier(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
-    def __init__(self, nhid, nout, dropouti, dropouto, encoder: StructFormer, padding_idx):
+    def __init__(self, nhid, dropout, encoder: StructFormer, padding_idx):
         super(Classifier, self).__init__()
 
         self.padding_idx = padding_idx
         self._encoder = encoder
 
         self.mlp = nn.Sequential(
-            nn.Dropout(dropouti),
+            nn.Dropout(dropout),
             nn.Linear(2 * nhid, nhid),
             nn.ELU(),
-            nn.Dropout(dropouto),
+            nn.Dropout(dropout),
             nn.Linear(nhid, 1),
             nn.Sigmoid(),
         )
@@ -115,6 +115,8 @@ class Classifier(nn.Module):
         self.init_weights()
 
     def init_weights(self):
+        nn.init.xavier_uniform_(self.mlp[1].weight)
+        nn.init.zeros_(self.mlp[1].bias)
         nn.init.xavier_uniform_(self.mlp[-2].weight)
         nn.init.zeros_(self.mlp[-2].bias)
 
@@ -174,7 +176,11 @@ if __name__ == "__main__":
     parser.add_argument(
         '--lr', type=float, default=0.001, help='initial learning rate')
     parser.add_argument(
+        '--dropout', type=float, default=0.1)
+    parser.add_argument(
         '--epochs', type=int, default=50, help='Number of epochs')
+    parser.add_argument(
+        '--bsz', type=int, default=128, help='Number of epochs')
     args = parser.parse_args()
 
     # Load data
@@ -194,9 +200,8 @@ if __name__ == "__main__":
     else:
         device = torch.device('cpu')
 
-    train_data = load_dataset(dataset['train'], dictionary, device=device)
-    valid_data = load_dataset(dataset['validation'], dictionary, device=device)
-    test_data = load_dataset(dataset['test'], dictionary, device=device)
+    valid_data = load_dataset(dataset['validation'], dictionary, device=device, bsz=args.bsz)
+    test_data = load_dataset(dataset['test'], dictionary, device=device, bsz=args.bsz)
 
     print('Loading model...')
     with open(args.model, 'rb') as f:
@@ -205,8 +210,8 @@ if __name__ == "__main__":
 
     print('Initialising classfier...')
     cls = Classifier(
-        nhid=512, nout=6,
-        dropouti=0.1, dropouto=0.1,
+        nhid=model.emb_size,
+        dropout=args.dropout, 
         encoder=model,
         padding_idx=dictionary['<pad>']
     ).to(device)
@@ -215,22 +220,28 @@ if __name__ == "__main__":
     cls_params = list(cls.mlp.parameters())
 
     params = mlm_params + cls_params
-    optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=1e-6)
+    optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-6)
     scheduler = lr_scheduler.ReduceLROnPlateau(
         optimizer, 'max', 0.5, patience=2, threshold=0)
 
     criterion = nn.MSELoss()
-    for epoch in range(args.epochs):
-        cls.train()
-        for x, y in train_data:
-            output = cls(x)
-            loss = criterion(output, y)
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        val_score = evaluate(cls, valid_data)
-        print("Epoch %3d, Score: %.3f" % (epoch, val_score))
-        scheduler.step(val_score)
+    try:
+        for epoch in range(args.epochs):
+            cls.train()
+            train_data = load_dataset(dataset['train'], dictionary, device=device, bsz=args.bsz)
+            for x, y in train_data:
+                output = cls(x)
+                loss = criterion(output, y)
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+            val_score = evaluate(cls, valid_data)
+            print("Epoch %3d, Score: %.3f" % (epoch, val_score))
+            scheduler.step(val_score)
+    except KeyboardInterrupt:
+        print('-' * 89)
+        print('Exiting from training early')
+
     test_score = evaluate(cls, test_data)
     print("Test score:", test_score)
 
