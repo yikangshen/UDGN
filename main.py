@@ -41,6 +41,10 @@ parser.add_argument(
     type=str,
     default='ptb',
     help='location of the data corpus')
+parser.add_argument(
+    '--model',
+    type=str,
+    default='structformer')
 parser.add_argument('--dict_thd', type=int, default=5,
                     help='upper epoch limit')
 parser.add_argument(
@@ -157,16 +161,28 @@ head_criterion = nn.CrossEntropyLoss(ignore_index=-1)
 
 ntokens = len(corpus.dictionary)
 print('Number of tokens: ', ntokens)
-model = structformer.StructFormer(
-    emb_size=args.nemb,
-    nlayers=args.nlayers,
-    ntokens=ntokens,
-    nhead=args.nheads,
-    dropout=args.dropout,
-    dropatt=args.dropatt,
-    pos_emb=args.pos_emb,
-    pad=pad_token,
-    n_parser_layers=args.n_parser_layers)
+
+if args.model == 'structformer':
+    model = structformer.StructFormer(
+        emb_size=args.nemb,
+        nlayers=args.nlayers,
+        ntokens=ntokens,
+        nhead=args.nheads,
+        dropout=args.dropout,
+        dropatt=args.dropatt,
+        pos_emb=args.pos_emb,
+        pad=pad_token,
+        n_parser_layers=args.n_parser_layers)
+elif args.model == 'transformer':
+    model = structformer.Transformer(
+        emb_size=args.nemb,
+        nlayers=args.nlayers,
+        ntokens=ntokens,
+        nhead=args.nheads,
+        dropout=args.dropout,
+        dropatt=args.dropatt,
+        pos_emb=args.pos_emb,
+        pad=pad_token)
 
 ###
 if args.resume:

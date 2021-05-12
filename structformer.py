@@ -161,7 +161,7 @@ class Transformer(nn.Module):
 
         return output, h_array
 
-    def forward(self, x, y, pos):
+    def forward(self, x, y, pos, deps=None):
         """Pass the input through the encoder layer.
         Args:
           x: input tokens (required).
@@ -182,7 +182,10 @@ class Transformer(nn.Module):
         target_mask = y != self.pad
         output = self.output_layer(raw_output[target_mask])
         loss = self.criterion(output, y[target_mask])
-        return loss, {'raw_output': raw_output, }
+        return loss, {
+            'raw_output': raw_output, 
+            'head': torch.zeros((batch_size, length, length), device=x.device), 
+            'loghead': torch.zeros((batch_size * length, length), device=x.device)}
 
 
 class StructFormer(Transformer):
