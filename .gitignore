@@ -7,3 +7,4 @@ structformer.code-workspace
 *.pt
 data
 figures
+*.sh
