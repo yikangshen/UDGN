@@ -89,6 +89,8 @@ parser.add_argument(
 parser.add_argument('--seed', type=int, default=1111, help='random seed')
 parser.add_argument('--nonmono', type=int, default=5, help='random seed')
 parser.add_argument('--cuda', action='store_true', help='use CUDA')
+parser.add_argument('--test_only', action='store_true')
+parser.add_argument('--eval_runs', type=int, default=5)
 parser.add_argument(
     '--log-interval',
     type=int,
@@ -105,6 +107,7 @@ parser.add_argument('--resume', type=str, default='',
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
+random.seed(args.seed)
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 if torch.cuda.is_available():
@@ -149,6 +152,8 @@ val_data, val_heads = batchify(
     corpus.valid, corpus.valid_heads, args.batch_size, device, pad=pad_token)
 test_data, test_heads = batchify(
     corpus.test, corpus.test_heads, args.batch_size, device, pad=pad_token)
+ood_test_data, ood_heads = batchify(
+    corpus.ood_test, corpus.ood_test_heads, args.batch_size, device, pad=pad_token)
 parser_test_data, parser_test_heads = batchify(
     corpus.parser_test, corpus.parser_test_heads, args.batch_size, device, pad=pad_token)
 
@@ -228,7 +233,7 @@ def mask_data(data):
 
 
 @torch.no_grad()
-def evaluate(data_source, heads_source):
+def evaluate_single_run(data_source, heads_source):
     """Evaluate the model on given dataset."""
     model.eval()
     total_loss = 0
@@ -252,6 +257,21 @@ def evaluate(data_source, heads_source):
         total_words += (heads > -1).float().sum().data
 
     return total_loss / total_count, total_corr / total_words
+
+
+def evaluate(data_source, heads_source, nruns=5):
+    test_loss_list = []
+    test_masked_acc_list = []
+
+    for _ in range(nruns):
+        test_loss, test_masked_acc = evaluate_single_run(data_source, heads_source)
+        test_loss_list.append(test_loss)
+        test_masked_acc_list.append(test_masked_acc)
+
+    test_loss = sum(test_loss_list) / nruns
+    test_masked_acc = sum(test_masked_acc_list) / nruns
+
+    return test_loss, test_masked_acc
 
 
 @torch.no_grad()
@@ -327,51 +347,54 @@ lr = args.lr
 stored_loss = 100000000
 
 # At any point you can hit Ctrl + C to break out of training early.
-try:
-    if not args.resume:
-        optimizer = torch.optim.Adam(
-            params, lr=args.lr, eps=1e-9, weight_decay=args.wdecay)
-        scheduler = lr_scheduler.ReduceLROnPlateau(
-            optimizer, 'min', 0.5, patience=2, threshold=0)
+if not args.test_only:
+    try:
+        if not args.resume:
+            optimizer = torch.optim.Adam(
+                params, lr=args.lr, eps=1e-9, weight_decay=args.wdecay)
+            scheduler = lr_scheduler.ReduceLROnPlateau(
+                optimizer, 'min', 0.5, patience=2, threshold=0)
 
-    for epoch in range(1, args.epochs + 1):
-        epoch_start_time = time.time()
+        for epoch in range(1, args.epochs + 1):
+            epoch_start_time = time.time()
 
-        train()
+            train()
 
-        val_loss, val_masked_acc = evaluate(val_data, val_heads)
-        val_acc = evaluate_parser(val_data, val_heads)
-        print('-' * 100)
-        print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
-              'valid ppl {:8.2f} | masked UAS {:5.3f} | valid UAS {:5.3f}'.format(
-                  epoch, (time.time() - epoch_start_time), val_loss,
-                  math.exp(val_loss), val_masked_acc, val_acc))
-        print('-' * 100)
+            val_loss, val_masked_acc = evaluate(val_data, val_heads, args.eval_runs)
+            val_acc = evaluate_parser(val_data, val_heads)
+            print('-' * 100)
+            print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
+                'valid ppl {:8.2f} | masked UAS {:5.3f} | valid UAS {:5.3f}'.format(
+                    epoch, (time.time() - epoch_start_time), val_loss,
+                    math.exp(val_loss), val_masked_acc, val_acc))
+            print('-' * 100)
 
-        if val_loss < stored_loss:
-            model_save(args.save)
-            print('Saving model (new best validation)')
-            stored_loss = val_loss
-        scheduler.step(val_loss)
+            if val_loss < stored_loss:
+                model_save(args.save)
+                print('Saving model (new best validation)')
+                stored_loss = val_loss
+            scheduler.step(val_loss)
 
-        print('PROGRESS: {}%'.format((epoch / args.epochs) * 100))
+            print('PROGRESS: {}%'.format((epoch / args.epochs) * 100))
 
-except KeyboardInterrupt:
-    print('-' * 89)
-    print('Exiting from training early')
+    except KeyboardInterrupt:
+        print('-' * 89)
+        print('Exiting from training early')
 
 # Load the best saved model.
 model_load(args.save)
 
 # Run on test data.
-test_loss, test_masked_acc = evaluate(test_data, test_heads)
+test_loss, test_masked_acc = evaluate(test_data, test_heads, nruns=args.eval_runs)
+ood_test_loss, _ = evaluate(ood_test_data, ood_test_data, nruns=args.eval_runs)
+
 argmax_uas, argmax_uuas = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='argmax')
 tree_uas, tree_uuas = test(model, corpus, torch.device('cuda:0') if args.cuda else torch.device('cpu'), mode='tree')
 print('=' * 89)
 print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | masked UAS {:5.3f} '
-      '| test UAS {:8.3f} / {:4.3f} | test UUAS {:8.3f} / {:4.3f}'.format(
+      '| test UAS {:8.3f} / {:4.3f} | test UUAS {:8.3f} / {:4.3f} | ood test ppl {:8.2f}'.format(
           test_loss, math.exp(test_loss), test_masked_acc, 
-          argmax_uas, tree_uas, argmax_uuas, tree_uuas))
+          argmax_uas, tree_uas, argmax_uuas, tree_uuas, math.exp(ood_test_loss)))
 print('=' * 89)
 
 report_objective(tree_uas, name='UAS')

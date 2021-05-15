@@ -43,6 +43,11 @@ PUNCTUATION_WORDS = [
 def extract_10_cells(cells, index):
     line_index, word, lemma, tag, _, head, rel, _, _, _ = cells
     try:
+        head = int(head)
+    except:
+        # index can't be parsed as an integer, use default
+        line_index, word, _, lemma, tag, _, head, rel, _, _ = cells
+    try:
         index = int(line_index)
     except ValueError:
         # index can't be parsed as an integer, use default
@@ -130,6 +135,8 @@ class Corpus(object):
             self.labels = Dictionary()
             build_label = True
 
+        ood_test_file_ids = ['data/deps/en_gum-ud-test.conllu']
+
         if dataset == 'ptb':
             all_file_ids = ptb.fileids()
             train_file_ids = []
@@ -212,6 +219,8 @@ class Corpus(object):
             = self.tokenize(test_file_ids)
         self.parser_test, self.parser_test_heads, self.parser_test_labels \
             = self.tokenize(parser_test_file_ids)
+        self.ood_test, self.ood_test_heads, self.ood_test_labels \
+            = self.tokenize(ood_test_file_ids)
 
         if build_dict:
             print('Saving dictionary...')
@@ -238,6 +247,13 @@ class Corpus(object):
                 trg_string = trg_file.read().strip()
                 trg_string_list = trg_string.split('\n\n')
                 for s in trg_string_list:
+                    lines = s.split('\n')
+                    new_lines = []
+                    for l in lines:
+                        if l[0] != '#':
+                            new_lines.append(l)
+                    s = '\n'.join(new_lines)
+
                     g = DependencyGraph(
                         s, top_relation_label='root', cell_extractor=extract_10_cells)
                     sen = []
