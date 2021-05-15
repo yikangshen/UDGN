@@ -142,7 +142,7 @@ def model_load(fn):
 
 
 print('Loading dataset...')
-corpus = data_dep.Corpus(dataset=args.data, thd=args.dict_thd)
+corpus = data_dep.Corpus(dataset=args.data, thd=args.dict_thd, test_only=args.test_only)
 
 pad_token = corpus.dictionary.word2idx['<pad>']
 mask_token = corpus.dictionary.word2idx['<mask>']

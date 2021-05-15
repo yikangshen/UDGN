@@ -104,7 +104,7 @@ class Dictionary(object):
 class Corpus(object):
     """Word-level language model corpus."""
 
-    def __init__(self, dataset='ptb', path='data/deps/', thd=5):
+    def __init__(self, dataset='ptb', path='data/deps/', thd=5, test_only=False):
         """Initialization.
 
         Args:
@@ -188,11 +188,13 @@ class Corpus(object):
             valid_path = ['../data/LDC2000T43/1987/W7_001', '../data/LDC2000T43/1988/W8_001', '../data/LDC2000T43/1989/W9_010']
             test_path = ['../data/LDC2000T43/1987/W7_002', '../data/LDC2000T43/1988/W8_002', '../data/LDC2000T43/1989/W9_011']
 
-            train_file_ids = []
-            for p in train_path:
-                for file_name in os.listdir(p):
-                    if file_name[-4:] == '.dep':
-                        train_file_ids.append(os.path.join(p, file_name))
+            if not test_only:
+                train_file_ids = []
+                for p in train_path:
+                    for file_name in os.listdir(p):
+                        if file_name[-4:] == '.dep':
+                            train_file_ids.append(os.path.join(p, file_name))
+                            
             valid_file_ids = []
             for p in valid_path:
                 for file_name in os.listdir(p)[:500]:
@@ -211,8 +213,9 @@ class Corpus(object):
                     parser_test_file_ids.append(os.path.expanduser(
                         "~") + '/nltk_data/corpora/ptb/' + file_id + '.dep')
 
-        self.train, self.train_heads, self.train_labels \
-            = self.tokenize(train_file_ids, build_dict, build_label, thd)
+        if not test_only:
+            self.train, self.train_heads, self.train_labels \
+                = self.tokenize(train_file_ids, build_dict, build_label, thd)
         self.valid, self.valid_heads, self.valid_labels \
             = self.tokenize(valid_file_ids)
         self.test, self.test_heads, self.test_labels \
