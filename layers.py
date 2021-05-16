@@ -366,7 +366,6 @@ class GatedMultiheadAttention(nn.Module):
         Returns:
           attn_output: self-attention output
         """
-
         bsz, length, embed_dim = query.size()
         assert embed_dim == self.embed_dim
 
@@ -404,7 +403,7 @@ class GatedMultiheadAttention(nn.Module):
 
         output = self.out_proj(self.drop(gated_output))
 
-        return output
+        return output, attn_output_weights
 
 
 class DSANLayer(nn.Module):
@@ -447,9 +446,9 @@ class DSANLayer(nn.Module):
         Returns:
           src3: the output of transformer layer, share the same shape as src.
         """
-        src2 = self.self_attn(
+        src2, attn = self.self_attn(
             src, rels=ctl, attn_mask=attn_mask,
             key_padding_mask=key_padding_mask)
 
         src2 = src + self.dropout(src2)
-        return src2
+        return src2, attn

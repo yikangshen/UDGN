@@ -25,7 +25,7 @@ import data_dep
 from ufal.chu_liu_edmonds import chu_liu_edmonds
 from hinton import plot
 
-
+import pickle
 def mean(x):
     return sum(x) / len(x)
 
@@ -71,7 +71,12 @@ def test(parser, corpus, device, prt=False, mode='tree'):
     nsens = 0
 
     idx2word = corpus.dictionary.idx2word
-    dataset = zip(corpus.parser_test, corpus.parser_test_heads)
+    label_count = len(corpus.labels.idx2word)
+    dataset = zip(
+        corpus.parser_test,
+        corpus.parser_test_heads,
+        corpus.parser_test_labels
+    )
 
     correct = 0.0
     undir_correct = 0.0
@@ -80,14 +85,31 @@ def test(parser, corpus, device, prt=False, mode='tree'):
     undirected = 0.0
     total_undirected = 0.0
 
-    for x, deps in dataset:
+    sum_x = 0.
+    sum_y = 0.
+    sum_xy = 0.
+
+    for x, deps, rels in dataset:
         sen = [idx2word[idx] for idx in x]
+        rels = torch.LongTensor(rels)
         data = torch.LongTensor([x]).to(device)
         pos = torch.LongTensor([list(range(len(x)))]).to(device)
 
         _, p_dict = parser(data, data, pos)
         mask = p_dict['att_mask']
         head = p_dict['head']
+        attns = torch.cat(
+            list(p[0] for p in p_dict['all_attn']),
+            dim=-1
+        )
+        correct_dep_score = attns[pos[0], torch.tensor(deps)]
+        rel_one_hot = torch.zeros((correct_dep_score.size(0), label_count),
+                                  dtype=torch.float, device=attns.device)
+        rel_one_hot[pos[0], rels] = 1.
+        sum_x += correct_dep_score.sum(0)
+        sum_y += rel_one_hot.sum(0)
+        sum_xy += (correct_dep_score[:, :, None] * rel_one_hot[:, None, :]).sum(0)
+
 
         head = head.clone().squeeze(0).cpu().numpy()
 
@@ -103,7 +125,7 @@ def test(parser, corpus, device, prt=False, mode='tree'):
         total += len(sen)
 
         thd = 0.2
-        undirected += (mask[0, torch.range(0, len(sen)-1).long(), torch.Tensor(deps).long()] > thd).sum()
+        undirected += (mask[0, torch.range(0, len(sen)-1).long(), deps] > thd).sum()
         total_undirected += (mask > thd).sum() / 2
 
         nsens += 1
@@ -131,6 +153,10 @@ def test(parser, corpus, device, prt=False, mode='tree'):
     f1 = 2 / (1 / prec + 1 / reca)
 
     print('Prec: %.3f, Reca: %.3f, F1: %.3f' % (prec, reca, f1))
+
+    unsup_rel_cov = sum_xy / sum_y[None, :]
+    pickle.dump((corpus.labels.idx2word, unsup_rel_cov),
+                open('cov_mat.pkl', 'wb'))
 
     return float(dda), float(uda)
 

@@ -149,12 +149,14 @@ class Transformer(nn.Module):
         if hasattr(self, 'pos_emb'):
             h = h + self.pos_emb(pos)
         h_list = []
+        a_list = []
         visibility = self.visibility(x, x.device)
 
         for i in range(self.nlayers):
             h_list.append(h)
-            h = self.layers[i](
-                h.transpose(0, 1), key_padding_mask=visibility).transpose(0, 1)
+            h, a = self.layers[i](h.transpose(0, 1),
+                                  key_padding_mask=visibility).transpose(0, 1)
+            a_list.append(a)
 
         output = h
         h_array = torch.stack(h_list, dim=2)
@@ -595,7 +597,7 @@ class DSAN(nn.Module):
 
         h = self.parser_drop(emb)
         h = pack_padded_sequence(
-            h, lengths, batch_first=True, enforce_sorted=False)
+            h, lengths.cpu(), batch_first=True, enforce_sorted=False)
         h, _ = self.parser_layers(h)
         h, _ = pad_packed_sequence(h, batch_first=True)
 
@@ -657,12 +659,16 @@ class DSAN(nn.Module):
             h = h + self.pos_emb(pos)
         h = self.drop(h)
         all_layers = [h]
+        all_attn = []
         for i in range(self.nlayers):
-            h = self.layers[i](
+            h, a = self.layers[i](
                 h, rels, attn_mask=att_mask,
-                key_padding_mask=visibility)
+                key_padding_mask=visibility
+            )
             all_layers.append(h)
-        return h, all_layers
+            all_attn.append(a)
+
+        return h, all_layers, all_attn
 
     def forward(self, x, y, pos, deps=None):
         """Pass the input through the encoder layer.
@@ -680,7 +686,7 @@ class DSAN(nn.Module):
         p, tag, logp = self.parse(x, deps)
         att_mask, head, rels = self.generate_mask(p)
 
-        raw_output, all_layers = self.encode(x, pos, att_mask, rels)
+        raw_output, all_layers, all_attn = self.encode(x, pos, att_mask, rels)
         raw_output = self.norm(raw_output)
         raw_output = self.drop(raw_output)
 
@@ -691,4 +697,5 @@ class DSAN(nn.Module):
             {'raw_output': raw_output, 'att_mask': att_mask,
              'head': head, 'tag': tag,
              'loghead': logp.view(batch_size * length, -1),
-             'all_layers': all_layers}
+             'all_layers': all_layers, 
+             'all_attn': all_attn}
