@@ -450,6 +450,7 @@ class DSAN(nn.Module):
                  ntokens,
                  nhead=8,
                  dropout=0.1,
+                 parser_dropout=0.2,
                  dropatt=0,
                  pos_emb=False,
                  pad=0,
@@ -488,6 +489,7 @@ class DSAN(nn.Module):
             raise Exception
 
         self.drop = nn.Dropout(dropout)
+        self.parser_drop = nn.Dropout(parser_dropout)
 
         self.emb = nn.Embedding(ntokens, emb_size)
         self.parser_emb = nn.Embedding(ntokens, emb_size)
@@ -510,7 +512,7 @@ class DSAN(nn.Module):
         self.tag = nn.Embedding(ntokens, ntags + 1)
 
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
-                                     dropout=dropout, batch_first=True, bidirectional=True)
+                                     dropout=parser_dropout, batch_first=True, bidirectional=True)
 
         self.parser_ff = nn.Linear(emb_size * 2, emb_size * 2)
 
@@ -591,13 +593,13 @@ class DSAN(nn.Module):
         tag = torch.softmax(self.tag(x), dim=-1)
         emb = self.tag_emb(tag[:, :, 1:]) + self.parser_emb(x) 
 
-        h = self.drop(emb)
+        h = self.parser_drop(emb)
         h = pack_padded_sequence(
             h, lengths, batch_first=True, enforce_sorted=False)
         h, _ = self.parser_layers(h)
         h, _ = pad_packed_sequence(h, batch_first=True)
 
-        h = self.drop(h)
+        h = self.parser_drop(h)
         parent, child = self.parser_ff(h).chunk(2, dim=-1)
 
         scaling = self.emb_size ** -0.5

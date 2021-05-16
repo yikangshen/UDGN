@@ -74,6 +74,11 @@ parser.add_argument(
     default=0.2,
     help='dropout for rnn layers (0 = no dropout)')
 parser.add_argument(
+    '--parser_dropout',
+    type=float,
+    default=0.2,
+    help='dropout for rnn layers (0 = no dropout)')
+parser.add_argument(
     '--dropatt',
     type=float,
     default=0.1,
@@ -196,6 +201,7 @@ elif args.model == 'DSAN':
         ntokens=ntokens,
         nhead=args.nheads,
         dropout=args.dropout,
+        parser_dropout=args.parser_dropout,
         dropatt=args.dropatt,
         pos_emb=args.pos_emb,
         pad=pad_token,
