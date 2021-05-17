@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# coding=utf-8
+# Lint as: python3
 
 import argparse
 import os
