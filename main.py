@@ -15,7 +15,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from orion.client import report_objective
 
 import data_dep
-import structformer
+import models
 from utils import batchify
 from test_phrase_grammar import test
 
@@ -158,7 +158,7 @@ ntokens = len(corpus.dictionary)
 print('Number of tokens: ', ntokens)
 
 if args.model == 'structformer':
-    model = structformer.StructFormer(
+    model = models.StructFormer(
         emb_size=args.nemb,
         nlayers=args.nlayers,
         ntokens=ntokens,
@@ -169,7 +169,7 @@ if args.model == 'structformer':
         pad=pad_token,
         n_parser_layers=args.n_parser_layers)
 elif args.model == 'transformer':
-    model = structformer.Transformer(
+    model = models.Transformer(
         emb_size=args.nemb,
         nlayers=args.nlayers,
         ntokens=ntokens,
@@ -179,7 +179,7 @@ elif args.model == 'transformer':
         pos_emb=args.pos_emb,
         pad=pad_token)
 elif args.model == 'DSAN':
-    model = structformer.DSAN(
+    model = models.DSAN(
         emb_size=args.nemb,
         head_size=args.nhid,
         nlayers=args.nlayers,
