@@ -14,13 +14,13 @@ If you use this code or our results in your research, we'd appreciate if you cit
 ```
 
 ## Software Requirements
-Python 3.6, NLTK and PyTorch 1.5.1 are required for the current codebase.
+Python 3, NLTK, ufal.chu_liu_edmonds and PyTorch are required for the current codebase.
 
 ## Steps
 
 1. Install PyTorch and NLTK
 
-2. Download [Penn Treebank](https://catalog.ldc.upenn.edu/LDC99T42) and [BLLIP](https://catalog.ldc.upenn.edu/LDC2000T43). Put [Penn Treebank](https://catalog.ldc.upenn.edu/LDC99T42) into NLTK's corpus folder. Put [BLLIP](https://catalog.ldc.upenn.edu/LDC2000T43) into ```./data`` folder
+2. Download [Penn Treebank](https://catalog.ldc.upenn.edu/LDC99T42) and [BLLIP](https://catalog.ldc.upenn.edu/LDC2000T43). Put [Penn Treebank](https://catalog.ldc.upenn.edu/LDC99T42) into NLTK's corpus folder. Put [BLLIP](https://catalog.ldc.upenn.edu/LDC2000T43) into `./data` folder
 
 3. Scripts and commands, from `google-research/`:
 
@@ -30,7 +30,7 @@ Python 3.6, NLTK and PyTorch 1.5.1 are required for the current codebase.
   	+ Test Unsupervised Parsing
       ```python test_phrase_grammar.py --cuda --checkpoint /path/to/your/model --print```
     
-    The default setting in `main.py` achieves a perplexity of approximately `60.9` on PTB test set, unlabeled F1 of approximately `54.0` and unlabeled attachment score of approximately `46.2` on WSJ test set.
+    The default setting in `main.py` achieves a perplexity of approximately `59.3` on PTB test set, Directed Dependency Accuracy of approximately `49.9` on WSJ test set, and Undirected Dependency Accuracy of approximately `61.8`.
     
 ## Acknowledgements
 Much of our preprocessing and evaluation code is based on the following repository:  
