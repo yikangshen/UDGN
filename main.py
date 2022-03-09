@@ -12,7 +12,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim.lr_scheduler as lr_scheduler
-from orion.client import report_objective
 
 import data_dep
 import models
@@ -29,18 +28,16 @@ parser.add_argument(
 parser.add_argument(
     '--model',
     type=str,
-    default='DSAN')
+    default='UDGN')
 parser.add_argument('--dict_thd', type=int, default=5,
                     help='upper epoch limit')
 parser.add_argument(
     '--nemb', type=int, default=512, help='word embedding size')
 parser.add_argument(
-    '--nhid', type=int, default=128, help='number of hidden units per layer')
+    '--head_size', type=int, default=128, help='number of hidden units per layer')
 parser.add_argument('--nlayers', type=int, default=8, help='number of layers')
 parser.add_argument(
     '--n_parser_layers', type=int, default=3, help='number of layers')
-parser.add_argument(
-    '--ntags', type=int, default=5, help='number of postags')
 parser.add_argument('--nheads', type=int, default=8, help='number of layers')
 parser.add_argument(
     '--lr', type=float, default=0.001, help='initial learning rate')
@@ -74,8 +71,6 @@ parser.add_argument(
     default=0.3,
     help='dropout for rnn layers (0 = no dropout)')
 parser.add_argument('--pos_emb', action='store_true', help='use CUDA')
-parser.add_argument(
-    '--relations', type=str, default='type1', help='relation types')
 parser.add_argument('--seed', type=int, default=1111, help='random seed')
 parser.add_argument('--nonmono', type=int, default=5, help='random seed')
 parser.add_argument('--cuda', action='store_true', help='use CUDA')
@@ -178,10 +173,10 @@ elif args.model == 'transformer':
         dropatt=args.dropatt,
         pos_emb=args.pos_emb,
         pad=pad_token)
-elif args.model == 'DSAN':
-    model = models.DSAN(
+elif args.model == 'UDGN':
+    model = models.UDGN(
         emb_size=args.nemb,
-        head_size=args.nhid,
+        head_size=args.head_size,
         nlayers=args.nlayers,
         ntokens=ntokens,
         nhead=args.nheads,
@@ -191,8 +186,6 @@ elif args.model == 'DSAN':
         pos_emb=args.pos_emb,
         pad=pad_token,
         n_parser_layers=args.n_parser_layers,
-        ntags=args.ntags,
-        relations=args.relations,
         detach_parser=args.parser_loss)
 
 ###
@@ -387,5 +380,3 @@ print('| End of training | test loss {:5.2f} | test ppl {:8.2f} | masked UAS {:5
           test_loss, math.exp(test_loss), test_masked_acc, 
           argmax_uas, tree_uas, argmax_uuas, tree_uuas, math.exp(ood_test_loss)))
 print('=' * 89)
-
-report_objective(tree_uas, name='UAS')

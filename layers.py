@@ -393,7 +393,7 @@ class GatedMultiheadAttention(nn.Module):
         return output, attn_output_weights
 
 
-class DSANLayer(nn.Module):
+class DGNLayer(nn.Module):
     """TransformerEncoderLayer is made up of self-attn and feedforward network."""
 
     def __init__(self,
@@ -416,7 +416,7 @@ class DSANLayer(nn.Module):
             attention bias
         """
 
-        super(DSANLayer, self).__init__()
+        super(DGNLayer, self).__init__()
         self.self_attn = GatedMultiheadAttention(
             d_model, d_hidden, nhead, nrels=nrels, dropout=dropout, dropatt=dropatt)
 

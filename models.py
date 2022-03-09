@@ -429,7 +429,7 @@ class StructFormer(Transformer):
              'head': head, 'att_mask': block, 'loghead': loghead.view(batch_size * length, -1)}
 
 
-class DSAN(nn.Module):
+class UDGN(nn.Module):
     """StructFormer model."""
 
     def __init__(self,
@@ -444,8 +444,6 @@ class DSAN(nn.Module):
                  pos_emb=False,
                  pad=0,
                  n_parser_layers=3,
-                 ntags=5,
-                 relations='none',
                  detach_parser=False):
         """Initialization.
 
@@ -464,18 +462,7 @@ class DSAN(nn.Module):
           weight_act: relations distribution activation function
         """
 
-        super(DSAN, self).__init__()
-
-        if relations == 'none':
-            nrels = 0
-        elif relations == 'type1':
-            nrels = 2
-        elif relations == 'type2':
-            nrels = 2
-        elif relations == 'type3':
-            nrels = 4
-        else:
-            raise Exception
+        super(UDGN, self).__init__()
 
         self.drop = nn.Dropout(dropout)
         self.parser_drop = nn.Dropout(parser_dropout)
@@ -486,19 +473,15 @@ class DSAN(nn.Module):
             self.pos_emb = nn.Embedding(500, emb_size)
 
         self.layers = nn.ModuleList([
-            layers.DSANLayer(
+            layers.DGNLayer(
                 emb_size, nhead, head_size,
-                nrels=nrels, dropout=dropout, dropatt=dropatt)
+                nrels=2, dropout=dropout, dropatt=dropatt)
             for _ in range(nlayers)])
 
         self.norm = nn.LayerNorm(emb_size)
 
         self.output_layer = nn.Linear(emb_size, ntokens)
         self.output_layer.weight = self.emb.weight
-
-        self.tag_emb = nn.Linear(ntags, emb_size, bias=False)
-
-        self.tag = nn.Embedding(ntokens, ntags + 1)
 
         self.parser_layers = nn.LSTM(emb_size, emb_size, n_parser_layers,
                                      dropout=parser_dropout, batch_first=True, bidirectional=True)
@@ -511,7 +494,6 @@ class DSAN(nn.Module):
         self.ntokens = ntokens
         self.emb_size = emb_size
         self.pad = pad
-        self.relations = relations
         self.detach_parser = detach_parser
 
 
@@ -524,8 +506,6 @@ class DSAN(nn.Module):
         initrange = 0.1
         self.emb.weight.data.uniform_(-initrange, initrange)
         self.parser_emb.weight.data.uniform_(-initrange, initrange)
-        self.tag_emb.weight.data.uniform_(-initrange, initrange)
-        self.tag.weight.data.zero_()
         if hasattr(self, 'pos_emb'):
             self.pos_emb.weight.data.uniform_(-initrange, initrange)
         self.output_layer.bias.data.fill_(0)
@@ -538,8 +518,6 @@ class DSAN(nn.Module):
         params.extend(self.parser_emb.parameters())
         params.extend(self.parser_layers.parameters())
         params.extend(self.parser_ff.parameters())
-        params.extend(self.tag.parameters())
-        params.extend(self.tag_emb.parameters())
         return params
 
     def lm_parameters(self):
@@ -577,10 +555,7 @@ class DSAN(nn.Module):
         lengths = mask.sum(1).cpu().int()
         visibility = mask[:, None, :].expand(-1, x.size(1), -1)
 
-        # emb = self.parser_emb(x)
-
-        tag = torch.softmax(self.tag(x), dim=-1)
-        emb = self.tag_emb(tag[:, :, 1:]) + self.parser_emb(x) 
+        emb = self.parser_emb(x) 
 
         h = self.parser_drop(emb)
         h = pack_padded_sequence(
@@ -596,7 +571,7 @@ class DSAN(nn.Module):
         logits = logits.masked_fill(~visibility, -inf)
         p = torch.softmax(logits, dim=-1)
 
-        return p, tag, logits
+        return p, logits
 
     def generate_mask(self, p):
         """Compute head and cibling distribution for each token."""
@@ -612,27 +587,12 @@ class DSAN(nn.Module):
         
         ones = torch.ones_like(p)
 
-        rels = []
         left = ones.tril(-1)
         right = ones.triu(1)
-        if self.relations == 'none':
-            rels = None
-        elif self.relations == 'type1':
-            rels = torch.stack([left, right], dim=-1)
-        elif self.relations == 'type2':
-            rels = torch.stack([head, child], dim=-1)
-            rels = F.normalize(rels, p=1, dim=-1)
-        elif self.relations == 'type3':
-            rels0 = torch.stack([left, right], dim=-1)
-            rels1 = torch.stack([head, child], dim=-1)
-            rels1 = F.normalize(rels1, p=1, dim=-1)
-            rels = rels0[:, :, :, :, None] * rels1[:, :, :, None, :]
-            rels = rels.view(bsz, length, length, -1)
+        rels = torch.stack([left, right], dim=-1)
 
         if self.detach_parser:
             att_mask = att_mask.detach()
-            if rels is not None:
-                rels = rels.detach()
 
         return att_mask, head, rels
 
@@ -670,7 +630,7 @@ class DSAN(nn.Module):
 
         batch_size, length = x.size()
 
-        p, tag, logp = self.parse(x, deps)
+        p, logp = self.parse(x, deps)
         att_mask, head, rels = self.generate_mask(p)
 
         raw_output, all_layers, all_attn = self.encode(x, pos, att_mask, rels)
@@ -681,8 +641,9 @@ class DSAN(nn.Module):
         output = self.output_layer(raw_output[target_mask])
         loss = self.criterion(output, y[target_mask])
         return loss, \
-            {'raw_output': raw_output, 'att_mask': att_mask,
-             'head': head, 'tag': tag,
+            {'raw_output': raw_output, 
+             'att_mask': att_mask,
+             'head': head,
              'loghead': logp.view(batch_size * length, -1),
              'all_layers': all_layers, 
              'all_attn': all_attn}

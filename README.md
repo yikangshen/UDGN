@@ -1,17 +1,15 @@
 # StructFormer
 
 This repository contains the code used for masked language model and unsupervised parsing experiments in 
-[StructFormer: Joint Unsupervised Induction of Dependency and Constituency Structure from Masked Language Modeling](https://arxiv.org/abs/2012.00857) paper.
+[Unsupervised Dependency Graph Network](https://openreview.net/forum?id=yYJhaF4-dZ9) paper.
 If you use this code or our results in your research, we'd appreciate if you cite our paper as following:
 
 ```
-@misc{shen2020structformer,
-      title={StructFormer: Joint Unsupervised Induction of Dependency and Constituency Structure from Masked Language Modeling}, 
-      author={Yikang Shen and Yi Tay and Che Zheng and Dara Bahri and Donald Metzler and Aaron Courville},
-      year={2020},
-      eprint={2012.00857},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
+@misc{shen2020unsupervised,
+      title={Unsupervised Dependency Graph Network}, 
+      author={Yikang Shen, Shawn Tan, Alessandro Sordoni, Peng Li, Jie Zhou, Aaron Courville},
+      booktitle={Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers)},
+      year={2022},
 }
 ```
 
@@ -22,12 +20,12 @@ Python 3.6, NLTK and PyTorch 1.5.1 are required for the current codebase.
 
 1. Install PyTorch and NLTK
 
-2. Download PTB data. Note that the two tasks, i.e., language modeling and unsupervised parsing share the same model strucutre but require different formats of the PTB data. For language modeling we need the standard 10,000 word  [Penn Treebank corpus](https://github.com/pytorch/examples/tree/75e435f98ab7aaa7f82632d4e633e8e03070e8ac/word_language_model/data/penn) data and for parsing we need [Penn Treebank Parsed](https://catalog.ldc.upenn.edu/LDC99T42) data. The [Penn Treebank Parsed](https://catalog.ldc.upenn.edu/LDC99T42) should be put into NLTK's corpus folder.
+2. Download [Penn Treebank Parsed](https://catalog.ldc.upenn.edu/LDC99T42) data, put it into NLTK's corpus folder.
 
 3. Scripts and commands, from `google-research/`:
 
   	+  Train Language Modeling
-  	```python main.py --cuda --pos_emb --save /path/to/your/model --data /path/to/your/ptb/corpus```
+  	```python main.py --cuda --save /path/to/your/model```
 
   	+ Test Unsupervised Parsing
       ```python test_phrase_grammar.py --cuda --checkpoint /path/to/your/model --print```
