@@ -20,7 +20,7 @@ Python 3.6, NLTK and PyTorch 1.5.1 are required for the current codebase.
 
 1. Install PyTorch and NLTK
 
-2. Download [Penn Treebank Parsed](https://catalog.ldc.upenn.edu/LDC99T42) data, put it into NLTK's corpus folder.
+2. Download [Penn Treebank](https://catalog.ldc.upenn.edu/LDC99T42) and [BLLIP](https://catalog.ldc.upenn.edu/LDC2000T43). Put [Penn Treebank](https://catalog.ldc.upenn.edu/LDC99T42) into NLTK's corpus folder. Put [BLLIP](https://catalog.ldc.upenn.edu/LDC2000T43) into ```./data`` folder
 
 3. Scripts and commands, from `google-research/`:
 
@@ -34,4 +34,4 @@ Python 3.6, NLTK and PyTorch 1.5.1 are required for the current codebase.
     
 ## Acknowledgements
 Much of our preprocessing and evaluation code is based on the following repository:  
-- [Ordered Neurons](https://github.com/yikangshen/Ordered-Neurons)  
+- [Structformer](https://github.com/google-research/google-research/tree/master/structformer)  
